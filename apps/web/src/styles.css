@@ -1,0 +1,10 @@
+html, body, #root, .app { min-height: 100%; margin: 0; }
+.app { min-height: 100vh; }
+.brand { height: 64px; color: #fff; padding: 20px; font-weight: 600; }
+.header-title { color: #fff; font-size: 16px; }
+.content { padding: 28px; background: #f5f7fa; }
+.title-row { width: 100%; justify-content: space-between; margin-bottom: 18px; }
+.title-row h1 { margin: 0; }
+.filters { margin-bottom: 16px; }
+.center { display: flex; justify-content: center; padding: 80px; }
+.ant-drawer-body .ant-btn { margin: 8px 8px 8px 0; }

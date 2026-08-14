@@ -1,0 +1,93 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum DatasetVersionStatus {
+  DRAFT
+  FROZEN
+  PUBLISHED
+  ARCHIVED
+}
+
+model Robot {
+  id         String      @id @default(uuid()) @db.Uuid
+  name       String
+  externalId String?     @unique
+  metadata   Json?
+  files      RobotFile[]
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+}
+
+model RobotFile {
+  id              String               @id @default(uuid()) @db.Uuid
+  robotId         String               @db.Uuid
+  robot           Robot                @relation(fields: [robotId], references: [id], onDelete: Cascade)
+  objectKey       String               @unique
+  originalName    String
+  fileType        String
+  mimeType        String
+  fileSize        BigInt
+  checksum        String               @unique
+  recognitionType String
+  schemaVersion   String
+  capturedAt      DateTime
+  metadata        Json?
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+  datasetFiles    DatasetVersionFile[]
+
+  @@index([robotId, capturedAt])
+  @@index([recognitionType, capturedAt])
+  @@index([createdAt])
+  @@index([fileType])
+}
+
+model Dataset {
+  id          String           @id @default(uuid()) @db.Uuid
+  name        String           @unique
+  description String?
+  metadata    Json?
+  versions    DatasetVersion[]
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+}
+
+model DatasetVersion {
+  id               String               @id @default(uuid()) @db.Uuid
+  datasetId        String               @db.Uuid
+  dataset          Dataset              @relation(fields: [datasetId], references: [id], onDelete: Cascade)
+  version          Int
+  status           DatasetVersionStatus @default(DRAFT)
+  manifestKey      String?
+  manifestChecksum String?
+  fileCount        Int                  @default(0)
+  totalSize        BigInt               @default(0)
+  gitCommit        String?
+  gitTag           String?
+  dvcPath          String?
+  dvcHash          String?
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+  frozenAt         DateTime?
+  files            DatasetVersionFile[]
+
+  @@unique([datasetId, version])
+  @@index([status])
+}
+
+model DatasetVersionFile {
+  datasetVersionId String         @db.Uuid
+  robotFileId      String         @db.Uuid
+  datasetVersion   DatasetVersion @relation(fields: [datasetVersionId], references: [id], onDelete: Cascade)
+  robotFile        RobotFile      @relation(fields: [robotFileId], references: [id], onDelete: Restrict)
+  createdAt        DateTime       @default(now())
+
+  @@id([datasetVersionId, robotFileId])
+  @@index([robotFileId])
+}
