@@ -34,7 +34,7 @@ jobs:
           [[ "$DEPLOY_ENABLED" == 'true' ]]
           [[ "$TARGET_VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]
           [[ -n "$ROLLBACK_REASON" ]]
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with: { persist-credentials: false }
       - name: Configure SSH
         shell: bash
