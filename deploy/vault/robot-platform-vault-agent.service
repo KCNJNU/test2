@@ -1,0 +1,20 @@
+[Unit]
+Description=Robot Platform Vault Agent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+Group=root
+ExecStart=/usr/bin/vault agent -config=/etc/vault-agent/agent.hcl
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/run/vault-agent /opt/robot-platform/config /opt/robot-platform/secrets
+
+[Install]
+WantedBy=multi-user.target

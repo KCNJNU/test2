@@ -1,0 +1,28 @@
+services:
+  edge:
+    image: ${EDGE_IMAGE:?immutable EDGE_IMAGE is required}
+    container_name: robot-platform-edge
+    restart: unless-stopped
+    read_only: true
+    init: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    ports:
+      - ${EDGE_BIND_ADDRESS:-127.0.0.1}:${EDGE_PORT:-8080}:8080
+    volumes:
+      - ${DEPLOY_ROOT:?DEPLOY_ROOT is required}/edge/default.conf:/etc/nginx/conf.d/default.conf:ro
+      - ${DEPLOY_ROOT}/edge/active-upstream.conf:/etc/nginx/conf.d/active-upstream.conf:ro
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+      - /var/cache/nginx:size=16m,mode=0755
+    networks: [edge]
+    healthcheck:
+      test: [CMD, wget, -q, -O, /dev/null, http://127.0.0.1:8080/healthz]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+networks:
+  edge:
+    external: true
+    name: ${PLATFORM_EDGE_NETWORK:?PLATFORM_EDGE_NETWORK is required}

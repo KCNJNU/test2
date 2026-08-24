@@ -6,4 +6,8 @@ export class CreateDatasetVersionDto {
   @ArrayUnique()
   @IsUUID('4', { each: true })
   fileIds?: string[];
+
+  @IsOptional()
+  @IsUUID('4')
+  sourceVersionId?: string;
 }

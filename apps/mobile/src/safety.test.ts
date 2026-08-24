@@ -1,0 +1,2 @@
+import { allowedTaskActions,mayQueueOfflineControl } from './safety';
+describe('mobile safety boundary',()=>{it('never offers ordinary resume for BLOCKED',()=>expect(allowedTaskActions('BLOCKED',true)).not.toContain('resume'));it('offers resume only for online PAUSED task',()=>{expect(allowedTaskActions('PAUSED',true)).toContain('resume');expect(allowedTaskActions('PAUSED',false)).toEqual([])});it('never queues offline control',()=>expect(mayQueueOfflineControl()).toBe(false));});

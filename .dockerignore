@@ -1,0 +1,15 @@
+.git
+.github
+.env
+.env.*
+!.env.example
+node_modules
+**/node_modules
+**/dist
+**/target
+**/.expo
+**/.cache
+**/coverage
+.venv-dvc
+data
+*.log

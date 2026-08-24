@@ -1,0 +1,3 @@
+{
+  "expo": { "name": "清洁机器人运维", "slug": "cleaning-robot-ops", "scheme": "robotops", "version": "0.1.0", "orientation": "portrait", "plugins": ["expo-router", "expo-secure-store", "expo-notifications"], "experiments": { "typedRoutes": true }, "ios": { "bundleIdentifier": "com.robothygenism.ops" }, "android": { "package": "com.robothygenism.ops" }, "extra": { "apiBaseUrl": "http://localhost:3100/api/v1", "eas": { "projectId": "SET_BY_DEPLOYMENT" } } }
+}

@@ -1,0 +1,118 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [master]
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: robot_platform_ci
+          POSTGRES_USER: robot_platform_ci
+          POSTGRES_PASSWORD: robot_platform_ci
+        ports: [5432:5432]
+        options: >-
+          --health-cmd "pg_isready -U robot_platform_ci -d robot_platform_ci"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgresql://robot_platform_ci:robot_platform_ci@localhost:5432/robot_platform_ci?schema=public
+    steps:
+      - uses: actions/checkout@v6
+        with: { fetch-depth: 0, persist-credentials: false }
+      - uses: actions/setup-node@v6
+        with: { node-version: 24, cache: npm }
+      - uses: actions/setup-java@v5
+        with: { distribution: temurin, java-version: 21, cache: maven }
+      - run: npm ci
+      - name: Migration compatibility policy
+        shell: bash
+        run: |
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            node scripts/release/migration-policy.mjs "origin/${{ github.base_ref }}"
+          else
+            node scripts/release/migration-policy.mjs
+          fi
+      - run: npx prisma validate --schema apps/api/prisma/schema.prisma
+      - run: npx prisma migrate deploy --schema apps/api/prisma/schema.prisma
+      - run: npm run build
+      - run: npm run lint
+      - run: npm run test
+      - name: Parse configuration and API contracts
+        run: node -e "const fs=require('fs'),YAML=require('yaml');for(const f of ['docker-compose.yml','deploy/compose/slot.yml','deploy/compose/singletons.yml','deploy/compose/migration.yml','deploy/compose/edge.yml','deploy/compose/production-infrastructure.yml','deploy/compose/production-slot.yml','deploy/compose/production-singletons.yml','deploy/compose/production-edge.yml','infra/prometheus/prometheus.yml','infra/prometheus/alert-rules.yml','docs/api/asyncapi.yaml'])YAML.parse(fs.readFileSync(f,'utf8'))"
+      - name: Validate Compose definitions
+        run: |
+          docker compose --env-file .env.example config --quiet
+          for file in slot singletons migration edge; do docker compose --env-file deploy/compose/ci.env -f "deploy/compose/${file}.yml" config --quiet; done
+          docker compose --env-file deploy/compose/ci.env -f deploy/compose/production-infrastructure.yml config --quiet
+          docker compose --env-file deploy/compose/ci.env -f deploy/compose/slot.yml -f deploy/compose/production-slot.yml config --quiet
+          docker compose --env-file deploy/compose/ci.env -f deploy/compose/singletons.yml -f deploy/compose/production-singletons.yml config --quiet
+          docker compose --env-file deploy/compose/ci.env -f deploy/compose/edge.yml -f deploy/compose/production-edge.yml config --quiet
+      - name: D6 EMQX mutual TLS, ACL and CRL acceptance
+        env:
+          EMQX_IMAGE: emqx/emqx@sha256:4dcdd8a7c053750b550c8a4c5b30a3cfb012edaebe041f84245b1633fab7b77a
+        run: bash scripts/d6/run-mqtt-security-ci.sh
+      - name: Validate D6 host automation
+        run: shellcheck deploy/backup/*.sh deploy/host/*.sh scripts/d6/*.sh
+      - name: npm vulnerability policy
+        shell: bash
+        run: |
+          npm audit --json > npm-audit.json || test -s npm-audit.json
+          node scripts/release/audit-policy.mjs npm-audit.json security/vulnerability-baseline.json
+      - name: Install verified Gitleaks
+        shell: bash
+        run: |
+          curl --fail --location --silent --show-error -o gitleaks.tar.gz https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz
+          echo "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb  gitleaks.tar.gz" | sha256sum --check
+          tar -xzf gitleaks.tar.gz gitleaks
+          ./gitleaks git --redact --no-banner
+      - name: Trivy filesystem critical gate
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          severity: CRITICAL
+          ignore-unfixed: true
+          exit-code: 1
+
+  dependency-review:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    permissions: { contents: read }
+    steps:
+      - uses: actions/checkout@v6
+        with: { persist-credentials: false }
+      - uses: actions/dependency-review-action@v5
+        with:
+          fail-on-severity: high
+
+  codeql:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v6
+        with: { persist-credentials: false }
+      - uses: github/codeql-action/init@v4
+        with: { languages: "javascript-typescript,java", queries: security-extended }
+      - uses: actions/setup-node@v6
+        with: { node-version: 24, cache: npm }
+      - uses: actions/setup-java@v5
+        with: { distribution: temurin, java-version: 21, cache: maven }
+      - run: npm ci
+      - run: npm run build
+      - uses: github/codeql-action/analyze@v4

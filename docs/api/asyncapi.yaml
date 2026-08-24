@@ -1,0 +1,180 @@
+asyncapi: 3.0.0
+info:
+  title: Cleaning Robot Device Gateway
+  version: 1.1.0
+  description: D2/D5 MQTT contract. Cloud commands are business-level only; robot-side safety and OTA recovery remain authoritative.
+servers:
+  development:
+    host: localhost:1883
+    protocol: mqtt
+    description: Local EMQX only. Production requires TLS, device certificates and ACLs.
+channels:
+  heartbeat:
+    address: robots/{robotId}/heartbeat
+    parameters:
+      robotId: { $ref: '#/components/parameters/robotId' }
+    messages:
+      heartbeat: { $ref: '#/components/messages/heartbeat' }
+  telemetry:
+    address: robots/{robotId}/telemetry
+    parameters:
+      robotId: { $ref: '#/components/parameters/robotId' }
+    messages:
+      telemetry: { $ref: '#/components/messages/telemetry' }
+  events:
+    address: robots/{robotId}/events
+    parameters:
+      robotId: { $ref: '#/components/parameters/robotId' }
+    messages:
+      event: { $ref: '#/components/messages/event' }
+  faults:
+    address: robots/{robotId}/faults
+    parameters:
+      robotId: { $ref: '#/components/parameters/robotId' }
+    messages:
+      fault: { $ref: '#/components/messages/fault' }
+  commands:
+    address: robots/{robotId}/commands
+    parameters:
+      robotId: { $ref: '#/components/parameters/robotId' }
+    messages:
+      command: { $ref: '#/components/messages/command' }
+  commandAck:
+    address: robots/{robotId}/commands/ack
+    parameters:
+      robotId: { $ref: '#/components/parameters/robotId' }
+    messages:
+      commandAck: { $ref: '#/components/messages/commandAck' }
+operations:
+  receiveHeartbeat: { action: receive, channel: { $ref: '#/channels/heartbeat' } }
+  receiveTelemetry: { action: receive, channel: { $ref: '#/channels/telemetry' } }
+  receiveEvent: { action: receive, channel: { $ref: '#/channels/events' } }
+  receiveFault: { action: receive, channel: { $ref: '#/channels/faults' } }
+  sendCommand: { action: send, channel: { $ref: '#/channels/commands' } }
+  receiveCommandAck: { action: receive, channel: { $ref: '#/channels/commandAck' } }
+components:
+  parameters:
+    robotId:
+      description: Registered Robot UUID; must match the message envelope.
+  messages:
+    heartbeat:
+      payload: { $ref: '#/components/schemas/heartbeatEnvelope' }
+      bindings: { mqtt: { qos: 1 } }
+    telemetry:
+      payload: { $ref: '#/components/schemas/telemetryEnvelope' }
+      bindings: { mqtt: { qos: 0 } }
+    event:
+      payload: { $ref: '#/components/schemas/eventEnvelope' }
+      bindings: { mqtt: { qos: 1 } }
+    fault:
+      payload: { $ref: '#/components/schemas/faultEnvelope' }
+      bindings: { mqtt: { qos: 1 } }
+    command:
+      payload: { $ref: '#/components/schemas/commandEnvelope' }
+      bindings: { mqtt: { qos: 1 } }
+    commandAck:
+      payload: { $ref: '#/components/schemas/commandAckEnvelope' }
+      bindings: { mqtt: { qos: 1 } }
+  schemas:
+    envelope:
+      type: object
+      required: [schemaVersion, messageId, robotId, robotSn, timestamp, sequence, type, payload]
+      properties:
+        schemaVersion: { const: '1.0' }
+        messageId: { type: string, minLength: 1, maxLength: 128 }
+        traceId: { type: string, pattern: '^[0-9a-fA-F]{32}$', description: Optional distributed trace correlation identifier }
+        robotId: { type: string, format: uuid }
+        robotSn: { type: string, minLength: 1, maxLength: 128 }
+        timestamp: { oneOf: [{ type: integer }, { type: string, format: date-time }] }
+        sequence: { oneOf: [{ type: integer, minimum: 0 }, { type: string, pattern: '^\\d+$' }] }
+        type: { type: string }
+        payload: { type: object }
+    heartbeatEnvelope:
+      allOf:
+        - { $ref: '#/components/schemas/envelope' }
+        - type: object
+          properties:
+            type: { const: heartbeat }
+            payload:
+              type: object
+              properties:
+                state: { $ref: '#/components/schemas/robotState' }
+                batteryPercent: { type: integer, minimum: 0, maximum: 100 }
+    telemetryEnvelope:
+      allOf:
+        - { $ref: '#/components/schemas/envelope' }
+        - type: object
+          properties: { type: { const: telemetry } }
+    eventEnvelope:
+      allOf:
+        - { $ref: '#/components/schemas/envelope' }
+        - type: object
+          properties:
+            type: { enum: [task_event, robot_state, maintenance_event, ota_status] }
+            payload:
+              oneOf:
+                - { $ref: '#/components/schemas/otaStatusPayload' }
+                - { type: object }
+    faultEnvelope:
+      allOf:
+        - { $ref: '#/components/schemas/envelope' }
+        - type: object
+          properties:
+            type: { const: fault_event }
+            payload:
+              type: object
+              required: [safeCode]
+              properties: { safeCode: { type: string } }
+    commandEnvelope:
+      allOf:
+        - { $ref: '#/components/schemas/envelope' }
+        - type: object
+          required: [commandId]
+          properties:
+            commandId: { type: string, format: uuid }
+            type: { $ref: '#/components/schemas/commandType' }
+            payload:
+              oneOf:
+                - { $ref: '#/components/schemas/otaCommandPayload' }
+                - { type: object }
+    commandAckEnvelope:
+      allOf:
+        - { $ref: '#/components/schemas/envelope' }
+        - type: object
+          properties:
+            type: { const: command_ack }
+            payload:
+              type: object
+              required: [commandId, status]
+              properties:
+                commandId: { type: string, format: uuid }
+                status: { enum: [ACCEPTED, EXECUTING, SUCCEEDED, REJECTED, FAILED] }
+                failureCode: { type: string }
+                failureMessage: { type: string }
+    robotState:
+      enum: [OFFLINE, BOOTING, IDLE, READY, DISPATCHING, RUNNING, PAUSED, BLOCKED, RETURNING, CHARGING, MAINTENANCE, FAULT, UPGRADING]
+    commandType:
+      enum: [MISSION_START, MISSION_PAUSE, MISSION_RESUME, MISSION_CANCEL, RETURN_TO_CHARGE, RETURN_TO_STANDBY, CONFIG_APPLY, SOFTWARE_UPDATE]
+    otaCommandPayload:
+      type: object
+      required: [otaJobId, campaignId, version, checksum, previousVersion]
+      properties:
+        otaJobId: { type: string, format: uuid }
+        campaignId: { type: string, format: uuid }
+        component: { enum: [ROBOT_APPLICATION, ROBOT_AGENT, ROS_PACKAGE, MCU_FIRMWARE, CONFIG] }
+        category: { enum: [BUSINESS, CLEANING, NAVIGATION, SAFETY] }
+        version: { type: string }
+        checksum: { type: string, pattern: '^[a-f0-9]{64}$' }
+        previousVersion: { type: [string, 'null'] }
+        downloadUrl: { type: string, description: Short-lived software artifact URL; never persist as a credential. }
+        signature: { type: string, description: Optional Base64 Ed25519 signature. }
+        signatureAlgorithm: { const: Ed25519 }
+        content: { type: object, description: Canonical configuration content for CONFIG_APPLY. }
+    otaStatusPayload:
+      type: object
+      required: [otaJobId, status, progress]
+      properties:
+        otaJobId: { type: string, format: uuid }
+        status: { enum: [DOWNLOADING, VERIFYING, INSTALLING, REBOOTING, VALIDATING, SUCCEEDED, FAILED, ROLLED_BACK] }
+        progress: { type: integer, minimum: 0, maximum: 100 }
+        reasonCode: { type: string, description: Stable machine-readable failure or rollback code; no stack trace or secret. }

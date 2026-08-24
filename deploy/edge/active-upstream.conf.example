@@ -1,0 +1,3 @@
+upstream active_web {
+  server robot-platform-blue-web:8080;
+}

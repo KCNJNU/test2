@@ -15,6 +15,23 @@ services:
       timeout: 5s
       retries: 10
 
+  pgadmin:
+    image: dpage/pgadmin4:9.17
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL:-admin@cleaning-robot.local}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD:-pgadmin_dev}
+      PGADMIN_DISABLE_POSTFIX: "true"
+      PGADMIN_CONFIG_CHECK_EMAIL_DELIVERABILITY: "False"
+      PGADMIN_CONFIG_ALLOW_SPECIAL_EMAIL_DOMAINS: "['local']"
+    ports:
+      - "${PGADMIN_PORT:-5050}:80"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+      - ./infra/pgadmin/servers.json:/pgadmin4/servers.json:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+
   minio:
     image: minio/minio:latest
     command: server /data --console-address ":9001"
@@ -32,6 +49,70 @@ services:
       timeout: 5s
       retries: 10
 
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    ports: ["6379:6379"]
+    volumes: ["redis_data:/data"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  mqtt:
+    image: emqx:5.8.8
+    environment:
+      EMQX_DASHBOARD__DEFAULT_USERNAME: ${EMQX_DASHBOARD_USERNAME:?EMQX_DASHBOARD_USERNAME is required}
+      EMQX_DASHBOARD__DEFAULT_PASSWORD: ${EMQX_DASHBOARD_PASSWORD:?EMQX_DASHBOARD_PASSWORD is required}
+    ports:
+      - "${MQTT_PORT:-1883}:1883"
+      - "${EMQX_DASHBOARD_PORT:-18083}:18083"
+    volumes:
+      - emqx_data:/opt/emqx/data
+      - emqx_log:/opt/emqx/log
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/emqx/bin/emqx ctl status"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  java-api:
+    profiles: ["java"]
+    build: ./apps/java-api
+    env_file: .env
+    environment:
+      JAVA_API_PORT: 3100
+      JAVA_DATABASE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-cleaning_robot}
+      JAVA_DATABASE_USERNAME: ${POSTGRES_USER:-cleaning_robot}
+      JAVA_DATABASE_PASSWORD: ${POSTGRES_PASSWORD:-cleaning_robot_dev}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      MQTT_BROKER_URI: tcp://mqtt:1883
+      NEST_INTERNAL_BASE_URL: http://host.docker.internal:3000
+    ports: ["3100:3100"]
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      mqtt: { condition: service_healthy }
+
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    profiles: ["observability"]
+    command: ["--config.file=/etc/prometheus/prometheus.yml", "--web.enable-lifecycle"]
+    ports: ["${PROMETHEUS_PORT:-9090}:9090"]
+    volumes:
+      - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./infra/prometheus/alert-rules.yml:/etc/prometheus/alert-rules.yml:ro
+      - prometheus_data:/prometheus
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
 volumes:
   postgres_data:
+  pgadmin_data:
   minio_data:
+  redis_data:
+  emqx_data:
+  emqx_log:
+  prometheus_data:

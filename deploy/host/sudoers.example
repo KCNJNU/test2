@@ -1,0 +1,3 @@
+# Install as /etc/sudoers.d/robot-platform after validating with visudo -cf.
+Cmnd_Alias ROBOT_PLATFORM_RELEASE = /opt/robot-platform/package/deploy/host/deploy-release.sh *, /opt/robot-platform/package/deploy/host/rollback-release.sh *, /usr/local/sbin/robot-platform-status
+robot-deploy ALL=(root) NOPASSWD: ROBOT_PLATFORM_RELEASE

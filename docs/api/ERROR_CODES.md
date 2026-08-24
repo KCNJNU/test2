@@ -1,0 +1,16 @@
+# 公共错误码
+
+错误统一为 `{code,message,requestId,details}`，并回传 `X-Request-ID`。
+
+| HTTP | Code | 含义 |
+|---:|---|---|
+| 400 | INVALID_TASK / INVALID_COMMAND | 请求或业务参数非法 |
+| 401 | INVALID_CREDENTIALS / ACCOUNT_LOCKED | 未认证或锁定 |
+| 403 | CSRF_INVALID / PERMISSION_DENIED | CSRF 或权限失败 |
+| 404 | RESOURCE_NOT_FOUND / ROBOT_NOT_FOUND | 不存在或跨租户隐藏 |
+| 409 | INVALID_TASK_TRANSITION / COMMAND_NOT_ALLOWED | 状态机拒绝 |
+| 409 | ROBOT_OFFLINE / ROBOT_NOT_READY / ROBOT_BUSY | 启动前置条件失败 |
+| 409 | SAFETY_BLOCKED / SAFE_POLICY_NOT_CONFIGURED | SAFE 阻断 |
+| 409 | MAP_VERSION_MISMATCH / MAP_NOT_AVAILABLE | 地图不匹配 |
+| 409 | OTA_PRECONDITION_FAILED | OTA 前置条件失败 |
+| 500 | INTERNAL_ERROR | 已脱敏内部错误 |

@@ -1,0 +1,57 @@
+server:
+  port: ${JAVA_API_PORT}
+  forward-headers-strategy: framework
+spring:
+  application:
+    name: robot-hygienism-java-api
+  datasource:
+    url: ${JAVA_DATABASE_URL}
+    username: ${JAVA_DATABASE_USERNAME}
+    password: ${JAVA_DATABASE_PASSWORD}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+  data:
+    redis:
+      host: ${REDIS_HOST}
+      port: ${REDIS_PORT}
+  servlet:
+    multipart:
+      max-file-size: ${OTA_MAX_ARTIFACT_SIZE:2GB}
+      max-request-size: ${OTA_MAX_ARTIFACT_SIZE:2GB}
+  mvc:
+    problemdetails:
+      enabled: false
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+springdoc:
+  swagger-ui:
+    path: /api/docs
+  api-docs:
+    path: /api/v1/openapi.yaml
+platform:
+  cors-origin: ${JAVA_CORS_ORIGIN}
+  cookie-secure: ${AUTH_COOKIE_SECURE}
+  session-hours: ${AUTH_SESSION_HOURS}
+  nest-base-url: ${NEST_INTERNAL_BASE_URL}
+  device-commands-enabled: ${DEVICE_COMMANDS_ENABLED}
+  simulator-enabled: ${DEVICE_SIMULATOR_ENABLED}
+  mqtt:
+    broker-uri: ${MQTT_BROKER_URI}
+    client-id: ${MQTT_CLIENT_ID}
+d6:
+  rate-limit:
+    key-salt: ${RATE_LIMIT_KEY_SALT:development-only-rate-limit-salt}
+  vault:
+    agent-proxy-url: ${VAULT_AGENT_PROXY_URL:}
+    pki-mount: ${VAULT_PKI_MOUNT:pki}
+  resilience:
+    evidence-token: ${RESILIENCE_EVIDENCE_TOKEN:}
+    retention-enabled: ${RETENTION_EXECUTION_ENABLED:false}
+    database-rpo-seconds: ${DATABASE_BACKUP_RPO_SECONDS:3600}
+    object-rpo-seconds: ${OBJECT_BACKUP_RPO_SECONDS:21600}
+    restore-drill-max-age-days: ${RESTORE_DRILL_MAX_AGE_DAYS:35}

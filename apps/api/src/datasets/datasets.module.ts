@@ -5,5 +5,5 @@ import { DatasetsService } from './datasets.service';
 import { DvcModule } from '../dvc/dvc.module';
 import { StorageModule } from '../storage/storage.module';
 
-@Module({ imports: [DvcModule, StorageModule], controllers: [DatasetsController], providers: [DatasetsService, DatasetPublishService] })
+@Module({ imports: [DvcModule, StorageModule], controllers: [DatasetsController], providers: [DatasetsService, DatasetPublishService], exports: [DatasetsService, DatasetPublishService] })
 export class DatasetsModule {}

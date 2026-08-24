@@ -1,0 +1,3 @@
+target
+.mvn/apache-maven-*
+.mvn/repository

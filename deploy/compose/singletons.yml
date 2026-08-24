@@ -1,0 +1,57 @@
+x-runtime-security: &runtime-security
+  restart: unless-stopped
+  read_only: true
+  init: true
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  tmpfs:
+    - /tmp:size=64m,mode=1777
+
+services:
+  worker:
+    <<: *runtime-security
+    image: ${WORKER_IMAGE:?immutable WORKER_IMAGE is required}
+    container_name: robot-platform-worker
+    env_file: ${RUNTIME_ENV_FILE:?RUNTIME_ENV_FILE is required}
+    environment:
+      APP_VERSION: ${RELEASE_VERSION:?RELEASE_VERSION is required}
+      RELEASE_VERSION: ${RELEASE_VERSION}
+      GIT_COMMIT: ${RELEASE_GIT_COMMIT:?RELEASE_GIT_COMMIT is required}
+      BUILD_TIME: ${RELEASE_BUILD_TIME:?RELEASE_BUILD_TIME is required}
+      DEPLOYMENT_ENVIRONMENT: ${DEPLOYMENT_ENVIRONMENT:?DEPLOYMENT_ENVIRONMENT is required}
+      SLOT: singleton
+      DVC_COMMAND: /opt/dvc/bin/dvc
+      DVC_REPOSITORY_ROOT: /var/lib/robot-platform/repository
+    stop_grace_period: 2m
+    volumes:
+      - type: bind
+        source: ${DVC_REPOSITORY_PATH:?DVC_REPOSITORY_PATH is required}
+        target: /var/lib/robot-platform/repository
+    networks: [runtime]
+
+  device-gateway:
+    <<: *runtime-security
+    image: ${NEST_IMAGE:?immutable NEST_IMAGE is required}
+    container_name: robot-platform-device-gateway
+    command: [node, apps/api/dist/device-gateway.js]
+    env_file: ${RUNTIME_ENV_FILE}
+    environment:
+      APP_VERSION: ${RELEASE_VERSION}
+      RELEASE_VERSION: ${RELEASE_VERSION}
+      GIT_COMMIT: ${RELEASE_GIT_COMMIT}
+      BUILD_TIME: ${RELEASE_BUILD_TIME}
+      DEPLOYMENT_ENVIRONMENT: ${DEPLOYMENT_ENVIRONMENT}
+      SLOT: singleton
+      DEVICE_GATEWAY_ENABLED: "true"
+      DEVICE_GATEWAY_METRICS_HOST: 0.0.0.0
+      DEVICE_GATEWAY_METRICS_PORT: "9464"
+      HEALTHCHECK_URL: http://127.0.0.1:9464/metrics
+    ports:
+      - 127.0.0.1:${GATEWAY_METRICS_PORT:-9464}:9464
+    stop_grace_period: 30s
+    networks: [runtime]
+
+networks:
+  runtime:
+    external: true
+    name: ${PLATFORM_RUNTIME_NETWORK:?PLATFORM_RUNTIME_NETWORK is required}

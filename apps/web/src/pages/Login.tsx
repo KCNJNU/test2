@@ -1,0 +1,11 @@
+import { LockOutlined, MailOutlined, RobotOutlined } from '@ant-design/icons';
+import { Alert, Button, Card, Form, Input, Typography } from 'antd';
+import { useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { useAuth } from '../auth/AuthContext';
+
+export function Login() {
+  const auth = useAuth(); const navigate = useNavigate(); const location = useLocation(); const [error, setError] = useState<string>(); const [busy, setBusy] = useState(false);
+  const submit = async (values: { email: string; password: string }) => { setBusy(true); setError(undefined); try { const user = await auth.login(values.email, values.password); navigate(user.mustChangePassword ? '/change-password' : ((location.state as { from?: string } | null)?.from ?? '/dashboard'), { replace: true }); } catch (reason) { setError(reason instanceof Error ? reason.message : 'Login failed'); } finally { setBusy(false); } };
+  return <main className="login-shell"><section className="login-brand"><div className="login-mark"><RobotOutlined /></div><Typography.Title>Robot Data Operations</Typography.Title><Typography.Paragraph>Secure industrial data management for cleaning robot recognition assets, datasets and publication workflows.</Typography.Paragraph><small>CLEANING ROBOT CLOUD PLATFORM · V2.1</small></section><Card className="login-card" variant="borderless"><Typography.Text className="page-eyebrow">AUTHENTICATED ACCESS</Typography.Text><Typography.Title level={2}>Sign in</Typography.Title><Typography.Paragraph type="secondary">Use your local platform account. Sessions expire automatically after 12 hours.</Typography.Paragraph>{error && <Alert type="error" showIcon message={error} />}<Form layout="vertical" onFinish={(values) => void submit(values)}><Form.Item label="Email" name="email" rules={[{ required: true, type: 'email' }]}><Input size="large" prefix={<MailOutlined />} autoComplete="username" /></Form.Item><Form.Item label="Password" name="password" rules={[{ required: true }]}><Input.Password size="large" prefix={<LockOutlined />} autoComplete="current-password" /></Form.Item><Button size="large" type="primary" htmlType="submit" block loading={busy}>Sign in to platform</Button></Form><div className="login-security">HttpOnly session · CSRF protected · RBAC enforced</div></Card></main>;
+}

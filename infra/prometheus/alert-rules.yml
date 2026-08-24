@@ -1,0 +1,53 @@
+groups:
+  - name: robot-platform-d3
+    rules:
+      - alert: PlatformTargetDown
+        expr: up{job=~"platform-api|device-gateway"} == 0
+        for: 2m
+        labels: { severity: critical }
+        annotations:
+          summary: "{{ $labels.job }} metrics target is unavailable"
+          runbook: "docs/devops/OBSERVABILITY.md#target-down"
+      - alert: PlatformApiHighErrorRatio
+        expr: sum(rate(platform_http_requests_total{service="api",status_code=~"5.."}[5m])) / clamp_min(sum(rate(platform_http_requests_total{service="api"}[5m])), 0.001) > 0.05
+        for: 10m
+        labels: { severity: warning }
+        annotations: { summary: "API 5xx ratio exceeds 5%" }
+      - alert: PlatformApiP95LatencyHigh
+        expr: histogram_quantile(0.95, sum by (le) (rate(platform_http_request_duration_seconds_bucket{service="api"}[5m]))) > 0.5
+        for: 10m
+        labels: { severity: warning }
+        annotations: { summary: "API p95 latency exceeds 500ms" }
+      - alert: DeviceGatewayDisconnected
+        expr: platform_device_gateway_connected{service="device-gateway"} == 0
+        for: 1m
+        labels: { severity: critical }
+        annotations:
+          summary: "Device Gateway is disconnected from MQTT"
+          safety_boundary: "Cloud Down does not imply robot Safety Down"
+      - alert: RobotOfflinePopulationHigh
+        expr: sum(platform_robots{online_status="OFFLINE"}) > 5
+        for: 5m
+        labels: { severity: warning }
+        annotations: { summary: "More than five robots are offline" }
+      - alert: CommandAckTimeoutSpike
+        expr: increase(platform_gateway_commands_total{result="timeout"}[10m]) > 3
+        labels: { severity: critical }
+        annotations:
+          summary: "More than three command ACK timeouts in ten minutes"
+          safety_boundary: "Do not infer robot stop or retry unsafe commands automatically"
+      - alert: CommandOutboxBacklog
+        expr: platform_outbox_backlog > 20
+        for: 5m
+        labels: { severity: warning }
+        annotations: { summary: "Command outbox backlog exceeds 20" }
+      - alert: JobQueueBacklog
+        expr: platform_job_backlog{status="QUEUED"} > 20
+        for: 10m
+        labels: { severity: warning }
+        annotations: { summary: "PostgreSQL job queue backlog exceeds 20" }
+      - alert: MetricsBusinessRefreshFailed
+        expr: platform_metrics_refresh_success == 0
+        for: 2m
+        labels: { severity: warning }
+        annotations: { summary: "Database-backed business metric refresh is failing" }

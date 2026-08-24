@@ -1,0 +1,71 @@
+x-runtime-security: &runtime-security
+  restart: unless-stopped
+  read_only: true
+  init: true
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  tmpfs:
+    - /tmp:size=64m,mode=1777
+
+services:
+  java-api:
+    <<: *runtime-security
+    image: ${JAVA_IMAGE:?immutable JAVA_IMAGE is required}
+    container_name: robot-platform-${SLOT:?SLOT is required}-java-api
+    env_file: ${RUNTIME_ENV_FILE:?RUNTIME_ENV_FILE is required}
+    environment:
+      APP_VERSION: ${RELEASE_VERSION:?RELEASE_VERSION is required}
+      RELEASE_VERSION: ${RELEASE_VERSION}
+      GIT_COMMIT: ${RELEASE_GIT_COMMIT:?RELEASE_GIT_COMMIT is required}
+      BUILD_TIME: ${RELEASE_BUILD_TIME:?RELEASE_BUILD_TIME is required}
+      DEPLOYMENT_ENVIRONMENT: ${DEPLOYMENT_ENVIRONMENT:?DEPLOYMENT_ENVIRONMENT is required}
+      SLOT: ${SLOT}
+      RUNTIME_SERVICE_NAME: java-api
+      JAVA_API_PORT: "3100"
+      NEST_INTERNAL_BASE_URL: http://robot-platform-${SLOT}-nest-api:3000
+    networks: [runtime]
+
+  nest-api:
+    <<: *runtime-security
+    image: ${NEST_IMAGE:?immutable NEST_IMAGE is required}
+    container_name: robot-platform-${SLOT}-nest-api
+    env_file: ${RUNTIME_ENV_FILE}
+    environment:
+      APP_VERSION: ${RELEASE_VERSION}
+      RELEASE_VERSION: ${RELEASE_VERSION}
+      GIT_COMMIT: ${RELEASE_GIT_COMMIT}
+      BUILD_TIME: ${RELEASE_BUILD_TIME}
+      DEPLOYMENT_ENVIRONMENT: ${DEPLOYMENT_ENVIRONMENT}
+      SLOT: ${SLOT}
+      API_PORT: "3000"
+    networks: [runtime]
+
+  web:
+    <<: *runtime-security
+    image: ${WEB_IMAGE:?immutable WEB_IMAGE is required}
+    container_name: robot-platform-${SLOT}-web
+    environment:
+      APP_VERSION: ${RELEASE_VERSION}
+      RELEASE_VERSION: ${RELEASE_VERSION}
+      GIT_COMMIT: ${RELEASE_GIT_COMMIT}
+      BUILD_TIME: ${RELEASE_BUILD_TIME}
+      DEPLOYMENT_ENVIRONMENT: ${DEPLOYMENT_ENVIRONMENT}
+      SLOT: ${SLOT}
+      JAVA_UPSTREAM: robot-platform-${SLOT}-java-api:3100
+      NEST_UPSTREAM: robot-platform-${SLOT}-nest-api:3000
+    depends_on:
+      java-api: { condition: service_healthy }
+      nest-api: { condition: service_healthy }
+    networks: [runtime, edge]
+    tmpfs:
+      - /tmp:size=32m,mode=1777
+      - /etc/nginx/conf.d:size=4m,uid=101,gid=101,mode=0755
+      - /var/cache/nginx:size=16m,uid=101,gid=101,mode=0755
+
+networks:
+  runtime:
+    external: true
+    name: ${PLATFORM_RUNTIME_NETWORK:?PLATFORM_RUNTIME_NETWORK is required}
+  edge:
+    external: true
+    name: ${PLATFORM_EDGE_NETWORK:?PLATFORM_EDGE_NETWORK is required}

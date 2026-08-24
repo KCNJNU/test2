@@ -1,0 +1,196 @@
+name: Images and TEST
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+
+permissions: {}
+
+concurrency:
+  group: images-test-master
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'master' && github.event.workflow_run.event == 'push'
+    runs-on: ubuntu-24.04
+    outputs:
+      commit: ${{ steps.values.outputs.commit }}
+      version: ${{ steps.values.outputs.version }}
+      build_time: ${{ steps.values.outputs.build_time }}
+      registry: ${{ steps.values.outputs.registry }}
+    steps:
+      - id: values
+        shell: bash
+        run: |
+          commit='${{ github.event.workflow_run.head_sha }}'
+          owner=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')
+          echo "commit=$commit" >> "$GITHUB_OUTPUT"
+          echo "version=0.0.0-sha.${commit:0:12}" >> "$GITHUB_OUTPUT"
+          echo "build_time=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+          echo "registry=ghcr.io/$owner/robot-platform" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: prepare
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - { name: nest, context: ., file: apps/api/Dockerfile, target: runtime }
+          - { name: worker, context: ., file: apps/api/Dockerfile, target: worker }
+          - { name: migration, context: ., file: apps/api/Dockerfile, target: migration }
+          - { name: web, context: ., file: apps/web/Dockerfile, target: runtime }
+          - { name: java-api, context: apps/java-api, file: apps/java-api/Dockerfile, target: runtime }
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.prepare.outputs.commit }}
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with: { registry: ghcr.io, username: "${{ github.actor }}", password: "${{ secrets.GITHUB_TOKEN }}" }
+      - uses: sigstore/cosign-installer@v4.1.2
+      - id: build
+        uses: docker/build-push-action@v7
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.file }}
+          target: ${{ matrix.target }}
+          push: true
+          tags: ${{ needs.prepare.outputs.registry }}-${{ matrix.name }}:sha-${{ needs.prepare.outputs.commit }}
+          build-args: |
+            APP_VERSION=${{ needs.prepare.outputs.version }}
+            GIT_COMMIT=${{ needs.prepare.outputs.commit }}
+            BUILD_TIME=${{ needs.prepare.outputs.build_time }}
+          provenance: mode=max
+          sbom: true
+          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.name }}
+      - name: Sign immutable image
+        env:
+          IMAGE: ${{ needs.prepare.outputs.registry }}-${{ matrix.name }}@${{ steps.build.outputs.digest }}
+        run: cosign sign --yes "$IMAGE"
+      - name: Critical image vulnerability gate
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: ${{ needs.prepare.outputs.registry }}-${{ matrix.name }}@${{ steps.build.outputs.digest }}
+          severity: CRITICAL
+          ignore-unfixed: true
+          exit-code: 1
+      - name: Save image evidence
+        shell: bash
+        run: printf '{"name":"%s","repository":"%s","digest":"%s"}\n' '${{ matrix.name }}' '${{ needs.prepare.outputs.registry }}-${{ matrix.name }}' '${{ steps.build.outputs.digest }}' > '${{ matrix.name }}.json'
+      - uses: actions/upload-artifact@v4
+        with: { name: "image-${{ matrix.name }}", path: "${{ matrix.name }}.json", if-no-files-found: error }
+
+  manifest:
+    needs: [prepare, build]
+    runs-on: ubuntu-24.04
+    permissions: { actions: read, contents: read, id-token: write }
+    outputs:
+      artifact: ${{ steps.name.outputs.artifact }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.prepare.outputs.commit }}
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with: { pattern: image-*, path: image-evidence, merge-multiple: true }
+      - uses: sigstore/cosign-installer@v4.1.2
+      - name: Build signed release manifest
+        shell: bash
+        env:
+          RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
+          GIT_COMMIT: ${{ needs.prepare.outputs.commit }}
+          BUILD_TIME: ${{ needs.prepare.outputs.build_time }}
+          RELEASE_NOTE: Automated TEST candidate from master
+          SOURCE_WORKFLOW: images/${{ github.run_id }}
+        run: |
+          for name in java-api migration nest web worker; do
+            key=$(echo "$name" | tr '[:lower:]-' '[:upper:]_')
+            echo "IMAGE_${key}_REPOSITORY=$(jq -r .repository "image-evidence/$name.json")" >> "$GITHUB_ENV"
+            echo "IMAGE_${key}_DIGEST=$(jq -r .digest "image-evidence/$name.json")" >> "$GITHUB_ENV"
+          done
+      - run: node scripts/release/release-manifest.mjs create release-manifest.json
+        env:
+          RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
+          GIT_COMMIT: ${{ needs.prepare.outputs.commit }}
+          BUILD_TIME: ${{ needs.prepare.outputs.build_time }}
+          RELEASE_NOTE: Automated TEST candidate from master
+          SOURCE_WORKFLOW: images/${{ github.run_id }}
+      - run: cosign sign-blob --yes --bundle release-manifest.sigstore.json release-manifest.json
+      - id: name
+        run: echo "artifact=release-${{ needs.prepare.outputs.commit }}" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ needs.prepare.outputs.commit }}
+          path: |
+            release-manifest.json
+            release-manifest.sigstore.json
+          if-no-files-found: error
+          retention-days: 90
+
+  deploy-test:
+    needs: [prepare, manifest]
+    if: vars.TEST_DEPLOY_ENABLED == 'true'
+    runs-on: ubuntu-24.04
+    environment: test
+    permissions: { actions: read, contents: read, id-token: write }
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.prepare.outputs.commit }}
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with: { name: "release-${{ needs.prepare.outputs.commit }}" }
+      - uses: sigstore/cosign-installer@v4.1.2
+      - name: Verify signed manifest
+        run: cosign verify-blob --bundle release-manifest.sigstore.json --certificate-identity-regexp '^https://github.com/${{ github.repository }}/.github/workflows/images.yml@refs/heads/master$' --certificate-oidc-issuer https://token.actions.githubusercontent.com release-manifest.json
+      - run: node scripts/release/release-manifest.mjs validate release-manifest.json '${{ needs.prepare.outputs.version }}' '${{ needs.prepare.outputs.commit }}'
+      - name: Configure SSH
+        shell: bash
+        run: |
+          install -m 0700 -d ~/.ssh
+          install -m 0600 /dev/null ~/.ssh/deploy_key
+          printf '%s\n' '${{ secrets.DEPLOY_SSH_KEY }}' > ~/.ssh/deploy_key
+          printf '%s\n' '${{ secrets.DEPLOY_HOST_KEY }}' > ~/.ssh/known_hosts
+      - name: Deploy immutable release to TEST
+        shell: bash
+        env:
+          DEPLOY_ROOT: ${{ vars.DEPLOY_ROOT }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+        run: |
+          [[ "$DEPLOY_ROOT" =~ ^/[A-Za-z0-9._/-]+$ ]]
+          tar -czf deploy-package.tgz deploy scripts/release/release-manifest.mjs
+          scp -i ~/.ssh/deploy_key deploy-package.tgz release-manifest.json "$DEPLOY_USER@$DEPLOY_HOST:/tmp/"
+          ssh -i ~/.ssh/deploy_key "$DEPLOY_USER@$DEPLOY_HOST" "mkdir -p '$DEPLOY_ROOT/package' && tar -xzf /tmp/deploy-package.tgz -C '$DEPLOY_ROOT/package' && bash '$DEPLOY_ROOT/package/deploy/host/deploy-release.sh' /tmp/release-manifest.json '${{ github.actor }}'"
+      - name: Sign TEST verification receipt
+        shell: bash
+        env:
+          VERIFIED_COMMIT: ${{ needs.prepare.outputs.commit }}
+        run: |
+          jq -n --arg environment TEST --arg gitCommit "$VERIFIED_COMMIT" --arg workflow "images/${{ github.run_id }}" --arg verifiedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            '{environment:$environment,gitCommit:$gitCommit,sourceWorkflow:$workflow,verifiedAt:$verifiedAt}' > test-verification.json
+          cosign sign-blob --yes --bundle test-verification.sigstore.json test-verification.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: test-verified-${{ needs.prepare.outputs.commit }}
+          path: |
+            test-verification.json
+            test-verification.sigstore.json
+          if-no-files-found: error
+          retention-days: 90
+
+  test-not-configured:
+    needs: [prepare, manifest]
+    if: vars.TEST_DEPLOY_ENABLED != 'true'
+    runs-on: ubuntu-24.04
+    steps:
+      - run: echo '### TEST deployment_not_configured — image build passed, but D4 TEST acceptance remains open.' >> "$GITHUB_STEP_SUMMARY"

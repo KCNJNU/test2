@@ -1,0 +1,39 @@
+services:
+  mqtt:
+    image: ${EMQX_IMAGE:?EMQX_IMAGE must be emqx 6.1.4 pinned by digest}
+    container_name: robot-platform-production-emqx
+    restart: unless-stopped
+    read_only: true
+    init: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    env_file: ${RUNTIME_ENV_FILE:?Vault-rendered runtime environment is required}
+    ports:
+      - ${MQTT_BIND_ADDRESS:-0.0.0.0}:8883:8883
+      - ${EMQX_DASHBOARD_BIND_ADDRESS:-127.0.0.1}:18083:18083
+    volumes:
+      - ${DEPLOY_ROOT:?DEPLOY_ROOT is required}/emqx/emqx.conf:/opt/emqx/etc/emqx.conf:ro
+      - ${DEPLOY_ROOT}/emqx/acl.conf:/opt/emqx/etc/acl.conf:ro
+      - ${TLS_CERT_DIR:?TLS_CERT_DIR is required}/emqx:/opt/emqx/etc/certs:ro
+      - emqx-data:/opt/emqx/data
+      - emqx-log:/opt/emqx/log
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    networks: [runtime, management]
+    healthcheck:
+      test: [CMD, /opt/emqx/bin/emqx, ctl, status]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+networks:
+  runtime:
+    external: true
+    name: ${PLATFORM_RUNTIME_NETWORK:?PLATFORM_RUNTIME_NETWORK is required}
+  management:
+    internal: true
+
+volumes:
+  emqx-data:
+  emqx-log:

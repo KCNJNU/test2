@@ -1,0 +1,83 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${REPAIR_POSTGRES_DB:?required}
+      POSTGRES_USER: ${REPAIR_POSTGRES_USER:?required}
+      POSTGRES_PASSWORD: ${REPAIR_POSTGRES_PASSWORD:?required}
+    ports:
+      - "${REPAIR_POSTGRES_PORT:?required}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:7.4-alpine
+    ports:
+      - "${REPAIR_REDIS_PORT:?required}:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address :9001
+    environment:
+      MINIO_ROOT_USER: ${REPAIR_MINIO_USER:?required}
+      MINIO_ROOT_PASSWORD: ${REPAIR_MINIO_PASSWORD:?required}
+    ports:
+      - "${REPAIR_MINIO_PORT:?required}:9000"
+      - "${REPAIR_MINIO_CONSOLE_PORT:?required}:9001"
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      minio:
+        condition: service_healthy
+    environment:
+      REPAIR_MINIO_USER: ${REPAIR_MINIO_USER:?required}
+      REPAIR_MINIO_PASSWORD: ${REPAIR_MINIO_PASSWORD:?required}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >-
+        mc alias set repair http://minio:9000 "$$REPAIR_MINIO_USER" "$$REPAIR_MINIO_PASSWORD" &&
+        mc mb --ignore-existing repair/robot-raw-files &&
+        mc mb --ignore-existing repair/robot-dvc-store
+
+  mqtt:
+    image: emqx/emqx:5.8.5
+    environment:
+      EMQX_ALLOW_ANONYMOUS: "true"
+    ports:
+      - "${REPAIR_MQTT_PORT:?required}:1883"
+      - "${REPAIR_EMQX_DASHBOARD_PORT:?required}:18083"
+    volumes:
+      - mqtt-data:/opt/emqx/data
+      - mqtt-log:/opt/emqx/log
+    healthcheck:
+      test: ["CMD", "/opt/emqx/bin/emqx_ctl", "status"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  postgres-data:
+  redis-data:
+  minio-data:
+  mqtt-data:
+  mqtt-log:

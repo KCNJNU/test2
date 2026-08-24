@@ -1,0 +1,135 @@
+name: Production Promotion
+
+on:
+  workflow_dispatch:
+    inputs:
+      git_commit:
+        description: Full master commit SHA already verified in TEST
+        required: true
+        type: string
+      version:
+        description: Production SemVer such as v1.2.3
+        required: true
+        type: string
+      release_note:
+        description: Auditable production release note
+        required: true
+        type: string
+
+permissions: {}
+
+concurrency:
+  group: production-deployment
+  cancel-in-progress: false
+
+jobs:
+  promote:
+    runs-on: ubuntu-24.04
+    environment: production
+    permissions:
+      actions: read
+      contents: read
+      id-token: write
+    steps:
+      - name: Require configured production gate
+        if: vars.PRODUCTION_DEPLOY_ENABLED != 'true'
+        run: |
+          echo 'Production deployment_not_configured. Configure the production Environment before claiming D4 acceptance.' >> "$GITHUB_STEP_SUMMARY"
+          exit 1
+      - name: Validate requested release identity
+        shell: bash
+        env:
+          REQUESTED_COMMIT: ${{ inputs.git_commit }}
+          REQUESTED_VERSION: ${{ inputs.version }}
+        run: |
+          [[ "$REQUESTED_COMMIT" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$REQUESTED_VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.git_commit }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Confirm commit belongs to master
+        env: { REQUESTED_COMMIT: "${{ inputs.git_commit }}" }
+        run: git merge-base --is-ancestor "$REQUESTED_COMMIT" origin/master
+      - uses: sigstore/cosign-installer@v4.1.2
+      - name: Download successful TEST candidate evidence
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REQUESTED_COMMIT: ${{ inputs.git_commit }}
+        shell: bash
+        run: |
+          run_id=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/images.yml/runs?head_sha=$REQUESTED_COMMIT&status=success&per_page=20" --jq '.workflow_runs[] | select(.conclusion == "success") | .id' | head -n 1)
+          [[ -n "$run_id" ]] || { echo 'No successful image workflow exists for the requested commit' >&2; exit 1; }
+          gh run download "$run_id" --repo "$GITHUB_REPOSITORY" --name "release-$REQUESTED_COMMIT"
+          gh run download "$run_id" --repo "$GITHUB_REPOSITORY" --name "test-verified-$REQUESTED_COMMIT"
+      - name: Verify candidate manifest and image signatures
+        shell: bash
+        env: { REQUESTED_COMMIT: "${{ inputs.git_commit }}" }
+        run: |
+          cosign verify-blob --bundle release-manifest.sigstore.json --certificate-identity-regexp '^https://github.com/${{ github.repository }}/.github/workflows/images.yml@refs/heads/master$' --certificate-oidc-issuer https://token.actions.githubusercontent.com release-manifest.json
+          cosign verify-blob --bundle test-verification.sigstore.json --certificate-identity-regexp '^https://github.com/${{ github.repository }}/.github/workflows/images.yml@refs/heads/master$' --certificate-oidc-issuer https://token.actions.githubusercontent.com test-verification.json
+          jq -e --arg commit "$REQUESTED_COMMIT" '.environment == "TEST" and .gitCommit == $commit' test-verification.json >/dev/null
+          node scripts/release/release-manifest.mjs validate release-manifest.json '' "$REQUESTED_COMMIT"
+          jq -r '.images[] | "\(.repository)@\(.digest)"' release-manifest.json | while read -r image; do
+            cosign verify --certificate-identity-regexp '^https://github.com/${{ github.repository }}/.github/workflows/images.yml@refs/heads/master$' --certificate-oidc-issuer https://token.actions.githubusercontent.com "$image" >/dev/null
+          done
+      - name: Create promoted manifest without rebuilding
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+          RELEASE_NOTE: ${{ inputs.release_note }}
+          REQUESTED_COMMIT: ${{ inputs.git_commit }}
+        shell: bash
+        run: |
+          jq --arg version "$RELEASE_VERSION" --arg note "$RELEASE_NOTE" --arg workflow "production/${{ github.run_id }}" '.version=$version | .releaseNote=$note | .sourceWorkflow=$workflow' release-manifest.json > production-manifest.json
+          mv production-manifest.json release-manifest.json
+          node scripts/release/release-manifest.mjs validate release-manifest.json "$RELEASE_VERSION" "$REQUESTED_COMMIT"
+          cosign sign-blob --yes --bundle release-manifest.sigstore.json release-manifest.json
+      - name: Configure SSH
+        shell: bash
+        run: |
+          install -m 0700 -d ~/.ssh
+          install -m 0600 /dev/null ~/.ssh/deploy_key
+          printf '%s\n' '${{ secrets.DEPLOY_SSH_KEY }}' > ~/.ssh/deploy_key
+          printf '%s\n' '${{ secrets.DEPLOY_HOST_KEY }}' > ~/.ssh/known_hosts
+      - name: Blue-green deploy approved Production release
+        shell: bash
+        env:
+          DEPLOY_ROOT: ${{ vars.DEPLOY_ROOT }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+        run: |
+          [[ "$DEPLOY_ROOT" =~ ^/[A-Za-z0-9._/-]+$ ]]
+          tar -czf deploy-package.tgz deploy scripts/release/release-manifest.mjs
+          scp -i ~/.ssh/deploy_key deploy-package.tgz release-manifest.json "$DEPLOY_USER@$DEPLOY_HOST:/tmp/"
+          ssh -i ~/.ssh/deploy_key "$DEPLOY_USER@$DEPLOY_HOST" "mkdir -p '$DEPLOY_ROOT/package' && tar -xzf /tmp/deploy-package.tgz -C '$DEPLOY_ROOT/package' && bash '$DEPLOY_ROOT/package/deploy/host/deploy-release.sh' /tmp/release-manifest.json '${{ github.actor }}'"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: production-${{ inputs.version }}
+          path: |
+            release-manifest.json
+            release-manifest.sigstore.json
+          if-no-files-found: error
+          retention-days: 365
+
+  record-deployment:
+    needs: promote
+    runs-on: ubuntu-24.04
+    permissions: { deployments: write }
+    env:
+      RELEASE_COMMIT: ${{ inputs.git_commit }}
+      RELEASE_VERSION: ${{ inputs.version }}
+    steps:
+      - uses: actions/github-script@v8
+        with:
+          script: |
+            const deployment = await github.rest.repos.createDeployment({
+              owner: context.repo.owner, repo: context.repo.repo,
+              ref: process.env.RELEASE_COMMIT, environment: 'production',
+              description: `Robot Platform ${process.env.RELEASE_VERSION}`, required_contexts: [], auto_merge: false,
+            });
+            if (deployment.data.id) await github.rest.repos.createDeploymentStatus({
+              owner: context.repo.owner, repo: context.repo.repo,
+              deployment_id: deployment.data.id, state: 'success',
+              description: 'Approved immutable blue-green deployment completed', environment: 'production',
+            });

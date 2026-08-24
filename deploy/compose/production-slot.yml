@@ -1,0 +1,7 @@
+services:
+  java-api:
+    extra_hosts:
+      - vault-agent:host-gateway
+  nest-api:
+    volumes:
+      - ${TLS_CERT_DIR:?TLS_CERT_DIR is required}/health-probe:/run/secrets/mqtt-health:ro

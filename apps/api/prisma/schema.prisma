@@ -14,14 +14,309 @@ enum DatasetVersionStatus {
   ARCHIVED
 }
 
+enum UserRole {
+  ADMIN
+  SUPER_ADMIN
+  TENANT_ADMIN
+  PROJECT_ADMIN
+  OPERATOR
+  MAINTENANCE_ENGINEER
+  VIEWER
+}
+
+enum ResourceStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum RobotOnlineStatus {
+  ONLINE
+  UNSTABLE
+  OFFLINE
+}
+
+enum RobotOperationalState {
+  OFFLINE
+  BOOTING
+  IDLE
+  READY
+  DISPATCHING
+  RUNNING
+  PAUSED
+  BLOCKED
+  RETURNING
+  CHARGING
+  MAINTENANCE
+  FAULT
+  UPGRADING
+}
+
+enum ChargingState {
+  UNKNOWN
+  NOT_CHARGING
+  CHARGING
+  FULL
+}
+
+enum CommandType {
+  MISSION_START
+  MISSION_PAUSE
+  MISSION_RESUME
+  MISSION_CANCEL
+  RETURN_TO_CHARGE
+  RETURN_TO_STANDBY
+  CONFIG_APPLY
+  SOFTWARE_UPDATE
+}
+
+enum CommandStatus {
+  CREATED
+  SENT
+  ACCEPTED
+  EXECUTING
+  SUCCEEDED
+  REJECTED
+  FAILED
+  TIMEOUT
+}
+
+enum TaskStatus {
+  DRAFT
+  SCHEDULED
+  QUEUED
+  DISPATCHING
+  ACCEPTED
+  RUNNING
+  PAUSED
+  BLOCKED
+  COMPLETED
+  FAILED
+  CANCELED
+}
+
+enum MapVersionStatus {
+  DRAFT
+  VALIDATING
+  PUBLISHED
+  ARCHIVED
+}
+
+enum ZoneType {
+  CLEANING
+  KEEP_OUT
+  SPEED_LIMIT
+  NO_CLEAN
+  CHARGING
+  STANDBY
+}
+
+enum FaultSeverity {
+  INFO
+  WARNING
+  STOP
+  LATCHED
+}
+
+enum FaultHandlingStatus {
+  OPEN
+  ACKNOWLEDGED
+  HANDLED
+}
+
+enum OtaStatus {
+  PENDING
+  DOWNLOADING
+  VERIFYING
+  INSTALLING
+  REBOOTING
+  VALIDATING
+  SUCCEEDED
+  FAILED
+  ROLLED_BACK
+}
+
+enum SoftwareComponent {
+  ROBOT_APPLICATION
+  ROBOT_AGENT
+  ROS_PACKAGE
+  MCU_FIRMWARE
+  CONFIG
+}
+
+enum ConfigCategory {
+  BUSINESS
+  CLEANING
+  NAVIGATION
+  SAFETY
+}
+
+enum ArtifactStatus {
+  VERIFIED
+  REVOKED
+}
+
+enum ConfigApprovalStatus {
+  APPROVED
+  PENDING_APPROVAL
+  REJECTED
+  SUPERSEDED
+}
+
+enum ConfigApprovalDecision {
+  APPROVED
+  REJECTED
+}
+
+enum OtaRolloutStrategy {
+  SINGLE
+  SELECTED_BATCH
+  PERCENTAGE
+  PROJECT
+}
+
+enum OtaCampaignStatus {
+  READY
+  RUNNING
+  SUCCEEDED
+  PARTIALLY_FAILED
+  FAILED
+  ROLLING_BACK
+  ROLLED_BACK
+  CANCELLED
+}
+
+enum OtaEventSource {
+  PLATFORM
+  ROBOT_AGENT
+}
+
+enum JobType {
+  DATASET_PUBLISH
+  RECOVERY_VERIFY
+  STORAGE_SCAN
+  STORAGE_ORPHAN_DELETE
+  UPLOAD_FINALIZE
+  RETENTION_CLEANUP
+}
+
+enum DeviceCertificateStatus {
+  ACTIVE
+  REVOKED
+  EXPIRED
+}
+
+enum BackupEvidenceType {
+  DATABASE_BACKUP
+  OBJECT_BACKUP
+}
+
+enum ResilienceEvidenceStatus {
+  SUCCEEDED
+  FAILED
+}
+
+enum JobStatus {
+  QUEUED
+  RUNNING
+  SUCCEEDED
+  FAILED
+  CANCELLED
+}
+
+enum JobStepStatus {
+  PENDING
+  RUNNING
+  SUCCEEDED
+  FAILED
+  SKIPPED
+}
+
+enum SavedViewResource {
+  ROBOTS
+  FILES
+  DATASETS
+  VERSIONS
+  JOBS
+  AUDIT
+  STORAGE
+}
+
+enum UploadStatus {
+  CREATED
+  UPLOADING
+  FINALIZING
+  COMPLETED
+  FAILED
+  ABORTED
+  EXPIRED
+}
+
+enum ReconciliationStatus {
+  QUEUED
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
+enum ReconciliationIssueType {
+  MISSING_OBJECT
+  ORPHAN_OBJECT
+  SIZE_MISMATCH
+}
+
+enum ReconciliationIssueStatus {
+  OPEN
+  RESOLVED
+  IGNORED
+}
+
 model Robot {
-  id         String      @id @default(uuid()) @db.Uuid
-  name       String
-  externalId String?     @unique
-  metadata   Json?
-  files      RobotFile[]
-  createdAt  DateTime    @default(now())
-  updatedAt  DateTime    @updatedAt
+  id                 String                @id @default(uuid()) @db.Uuid
+  name               String
+  externalId         String?               @unique
+  tenantId           String?               @db.Uuid
+  tenant             Tenant?               @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  projectId          String?               @db.Uuid
+  project            Project?              @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  siteId             String?               @db.Uuid
+  site               Site?                 @relation(fields: [siteId], references: [id], onDelete: Restrict)
+  floorId            String?               @db.Uuid
+  floor              Floor?                @relation(fields: [floorId], references: [id], onDelete: Restrict)
+  lifecycleStatus    ResourceStatus        @default(ACTIVE)
+  onlineStatus       RobotOnlineStatus     @default(OFFLINE)
+  operationalState   RobotOperationalState @default(OFFLINE)
+  safetyCode         String?
+  batteryPercent     Int?
+  chargingState      ChargingState         @default(UNKNOWN)
+  currentMapId       String?               @db.Uuid
+  currentMapVersion  String?
+  currentTaskId      String?               @db.Uuid
+  softwareVersion    String?
+  mcuVersion         String?
+  configVersion      String?
+  localizationStatus String?
+  lastOnlineAt       DateTime?
+  lastTelemetryAt    DateTime?
+  lastStateSequence  BigInt?
+  metadata           Json?
+  files              RobotFile[]
+  uploads            UploadSession[]
+  commands           Command[]
+  tasks              Task[]
+  taskRuns           TaskRun[]
+  faults             FaultEvent[]
+  safetyStates       SafetyState[]
+  maintenanceRecords MaintenanceRecord[]
+  telemetrySamples   TelemetrySample[]
+  healthSnapshots    RobotHealthSnapshot[]
+  otaJobs            OTAJob[]
+  diagnosticBundles  DiagnosticBundle[]
+  deviceCertificates DeviceCertificate[]
+  createdAt          DateTime              @default(now())
+  updatedAt          DateTime              @updatedAt
+
+  @@index([tenantId, projectId, onlineStatus])
+  @@index([floorId, operationalState])
 }
 
 model RobotFile {
@@ -41,6 +336,7 @@ model RobotFile {
   createdAt       DateTime             @default(now())
   updatedAt       DateTime             @updatedAt
   datasetFiles    DatasetVersionFile[]
+  tags            RobotFileTag[]
 
   @@index([robotId, capturedAt])
   @@index([recognitionType, capturedAt])
@@ -50,10 +346,15 @@ model RobotFile {
 
 model Dataset {
   id          String           @id @default(uuid()) @db.Uuid
+  tenantId    String?          @db.Uuid
+  tenant      Tenant?          @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  projectId   String?          @db.Uuid
+  project     Project?         @relation(fields: [projectId], references: [id], onDelete: Restrict)
   name        String           @unique
   description String?
   metadata    Json?
   versions    DatasetVersion[]
+  tags        DatasetTag[]
   createdAt   DateTime         @default(now())
   updatedAt   DateTime         @updatedAt
 }
@@ -90,4 +391,988 @@ model DatasetVersionFile {
 
   @@id([datasetVersionId, robotFileId])
   @@index([robotFileId])
+}
+
+model User {
+  id                       String              @id @default(uuid()) @db.Uuid
+  email                    String              @unique
+  displayName              String
+  passwordHash             String
+  role                     UserRole            @default(VIEWER)
+  tenantId                 String?             @db.Uuid
+  tenant                   Tenant?             @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  isActive                 Boolean             @default(true)
+  mustChangePassword       Boolean             @default(true)
+  failedLoginCount         Int                 @default(0)
+  lockedUntil              DateTime?
+  lastLoginAt              DateTime?
+  notificationPreferences  Json?
+  sessions                 Session[]
+  requestedJobs            Job[]               @relation("RequestedJobs")
+  notifications            Notification[]
+  auditLogs                AuditLog[]          @relation("AuditActor")
+  settingsUpdated          SystemSetting[]     @relation("SettingUpdater")
+  savedViews               SavedView[]
+  uploadSessions           UploadSession[]
+  reconciliationRuns       ReconciliationRun[]
+  projectAccess            UserProjectAccess[]
+  acknowledgedFaults       FaultEvent[]        @relation("FaultAcknowledgedBy")
+  handledFaults            FaultEvent[]        @relation("FaultHandledBy")
+  maintenanceRecords       MaintenanceRecord[] @relation("MaintenanceOperator")
+  maintenanceConfirmations MaintenanceRecord[] @relation("MaintenanceOnsiteConfirmer")
+  createdCommands          Command[]           @relation("CommandCreator")
+  registeredCertificates   DeviceCertificate[] @relation("CertificateRegistrar")
+  revokedCertificates      DeviceCertificate[] @relation("CertificateRevoker")
+  createdMaps              MapVersion[]        @relation("MapVersionCreator")
+  createdTasks             Task[]              @relation("TaskCreator")
+  pushDevices              PushDevice[]
+  createdAt                DateTime            @default(now())
+  updatedAt                DateTime            @updatedAt
+
+  @@index([role, isActive])
+}
+
+model Session {
+  id            String   @id @default(uuid()) @db.Uuid
+  userId        String   @db.Uuid
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash     String   @unique
+  csrfTokenHash String
+  expiresAt     DateTime
+  lastSeenAt    DateTime @default(now())
+  createdAt     DateTime @default(now())
+
+  @@index([userId, expiresAt])
+  @@index([expiresAt])
+}
+
+model Job {
+  id              String         @id @default(uuid()) @db.Uuid
+  type            JobType
+  status          JobStatus      @default(QUEUED)
+  progress        Int            @default(0)
+  resourceType    String?
+  resourceId      String?
+  payload         Json
+  result          Json?
+  errorCode       String?
+  errorMessage    String?
+  attempts        Int            @default(0)
+  maxAttempts     Int            @default(3)
+  availableAt     DateTime       @default(now())
+  lockedAt        DateTime?
+  lockedBy        String?
+  heartbeatAt     DateTime?
+  cancelRequested Boolean        @default(false)
+  requestedById   String?        @db.Uuid
+  requestedBy     User?          @relation("RequestedJobs", fields: [requestedById], references: [id], onDelete: SetNull)
+  tenantId        String?        @db.Uuid
+  tenant          Tenant?        @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  projectId       String?        @db.Uuid
+  project         Project?       @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  steps           JobStep[]
+  notifications   Notification[]
+  startedAt       DateTime?
+  finishedAt      DateTime?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  @@index([status, availableAt, createdAt])
+  @@index([resourceType, resourceId])
+  @@index([requestedById, createdAt])
+}
+
+model JobStep {
+  id           String        @id @default(uuid()) @db.Uuid
+  jobId        String        @db.Uuid
+  job          Job           @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  name         String
+  stepOrder    Int
+  status       JobStepStatus @default(PENDING)
+  progress     Int           @default(0)
+  output       Json?
+  errorMessage String?
+  startedAt    DateTime?
+  finishedAt   DateTime?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  @@unique([jobId, name])
+  @@unique([jobId, stepOrder])
+}
+
+model JobLease {
+  key         String   @id
+  owner       String
+  expiresAt   DateTime
+  heartbeatAt DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model WorkerHeartbeat {
+  workerId    String   @id
+  version     String
+  concurrency Int
+  startedAt   DateTime
+  heartbeatAt DateTime
+  updatedAt   DateTime @updatedAt
+
+  @@index([heartbeatAt])
+}
+
+model DeviceCertificate {
+  id                String                  @id @default(uuid()) @db.Uuid
+  robotId           String                  @db.Uuid
+  robot             Robot                   @relation(fields: [robotId], references: [id], onDelete: Cascade)
+  certificatePem    String
+  fingerprintSha256 String                  @unique
+  serialNumber      String
+  subjectCn         String
+  issuer            String
+  notBefore         DateTime
+  notAfter          DateTime
+  status            DeviceCertificateStatus @default(ACTIVE)
+  registeredById    String                  @db.Uuid
+  registeredBy      User                    @relation("CertificateRegistrar", fields: [registeredById], references: [id], onDelete: Restrict)
+  revokedById       String?                 @db.Uuid
+  revokedBy         User?                   @relation("CertificateRevoker", fields: [revokedById], references: [id], onDelete: Restrict)
+  revokedAt         DateTime?
+  revocationReason  String?
+  createdAt         DateTime                @default(now())
+  updatedAt         DateTime                @updatedAt
+
+  @@unique([robotId, serialNumber])
+  @@index([robotId, status, notAfter])
+}
+
+model BackupEvidence {
+  id           String                   @id @default(uuid()) @db.Uuid
+  type         BackupEvidenceType
+  status       ResilienceEvidenceStatus
+  snapshotId   String?
+  sourceHost   String?
+  checksum     String?
+  objectCount  BigInt?
+  totalBytes   BigInt?
+  startedAt    DateTime
+  completedAt  DateTime
+  details      Json?
+  createdAt    DateTime                 @default(now())
+
+  @@index([type, status, completedAt])
+}
+
+model RestoreDrill {
+  id           String                   @id @default(uuid()) @db.Uuid
+  status       ResilienceEvidenceStatus
+  snapshotId   String?
+  sourceHost   String?
+  checksum     String?
+  objectCount  BigInt?
+  totalBytes   BigInt?
+  startedAt    DateTime
+  completedAt  DateTime
+  details      Json?
+  createdAt    DateTime                 @default(now())
+
+  @@index([status, completedAt])
+}
+
+model Notification {
+  id          String    @id @default(uuid()) @db.Uuid
+  userId      String    @db.Uuid
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  jobId       String?   @db.Uuid
+  job         Job?      @relation(fields: [jobId], references: [id], onDelete: SetNull)
+  type        String
+  title       String
+  message     String
+  resourceUrl String?
+  readAt      DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([userId, readAt, createdAt])
+}
+
+model AuditLog {
+  id           String   @id @default(uuid()) @db.Uuid
+  actorUserId  String?  @db.Uuid
+  actor        User?    @relation("AuditActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+  tenantId     String?  @db.Uuid
+  tenant       Tenant?  @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  projectId    String?  @db.Uuid
+  project      Project? @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  action       String
+  method       String?
+  route        String?
+  resourceType String?
+  resourceId   String?
+  statusCode   Int?
+  requestId    String?
+  ipAddress    String?
+  userAgent    String?
+  durationMs   Int?
+  metadata     Json?
+  beforeValue  Json?
+  afterValue   Json?
+  createdAt    DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([actorUserId, createdAt])
+  @@index([resourceType, resourceId, createdAt])
+  @@index([action, createdAt])
+}
+
+model SystemSetting {
+  key         String   @id
+  value       Json
+  updatedById String?  @db.Uuid
+  updatedBy   User?    @relation("SettingUpdater", fields: [updatedById], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Tag {
+  id         String         @id @default(uuid()) @db.Uuid
+  tenantId   String?        @db.Uuid
+  tenant     Tenant?        @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  name       String         @unique
+  color      String
+  robotFiles RobotFileTag[]
+  datasets   DatasetTag[]
+  createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @updatedAt
+}
+
+model RobotFileTag {
+  robotFileId String    @db.Uuid
+  tagId       String    @db.Uuid
+  robotFile   RobotFile @relation(fields: [robotFileId], references: [id], onDelete: Cascade)
+  tag         Tag       @relation(fields: [tagId], references: [id], onDelete: Cascade)
+  createdAt   DateTime  @default(now())
+
+  @@id([robotFileId, tagId])
+  @@index([tagId])
+}
+
+model DatasetTag {
+  datasetId String   @db.Uuid
+  tagId     String   @db.Uuid
+  dataset   Dataset  @relation(fields: [datasetId], references: [id], onDelete: Cascade)
+  tag       Tag      @relation(fields: [tagId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@id([datasetId, tagId])
+  @@index([tagId])
+}
+
+model SavedView {
+  id        String            @id @default(uuid()) @db.Uuid
+  ownerId   String            @db.Uuid
+  owner     User              @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  resource  SavedViewResource
+  name      String
+  query     Json
+  isShared  Boolean           @default(false)
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+
+  @@unique([ownerId, resource, name])
+  @@index([resource, isShared, updatedAt])
+}
+
+model UploadSession {
+  id              String       @id @default(uuid()) @db.Uuid
+  ownerId         String       @db.Uuid
+  owner           User         @relation(fields: [ownerId], references: [id], onDelete: Restrict)
+  robotId         String       @db.Uuid
+  robot           Robot        @relation(fields: [robotId], references: [id], onDelete: Restrict)
+  status          UploadStatus @default(CREATED)
+  originalName    String
+  fileType        String
+  mimeType        String
+  fileSize        BigInt
+  checksum        String
+  recognitionType String
+  schemaVersion   String
+  capturedAt      DateTime
+  metadata        Json?
+  chunkSize       Int
+  totalParts      Int
+  maxFileSize     BigInt
+  tempPrefix      String       @unique
+  finalObjectKey  String?      @unique
+  robotFileId     String?      @unique @db.Uuid
+  errorMessage    String?
+  expiresAt       DateTime
+  completedAt     DateTime?
+  parts           UploadPart[]
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  @@index([ownerId, status, createdAt])
+  @@index([status, expiresAt])
+  @@index([checksum])
+}
+
+model UploadPart {
+  id              String        @id @default(uuid()) @db.Uuid
+  uploadSessionId String        @db.Uuid
+  uploadSession   UploadSession @relation(fields: [uploadSessionId], references: [id], onDelete: Cascade)
+  partNumber      Int
+  objectKey       String        @unique
+  size            Int
+  checksum        String
+  createdAt       DateTime      @default(now())
+
+  @@unique([uploadSessionId, partNumber])
+}
+
+model ReconciliationRun {
+  id             String                @id @default(uuid()) @db.Uuid
+  status         ReconciliationStatus  @default(QUEUED)
+  requestedById  String?               @db.Uuid
+  requestedBy    User?                 @relation(fields: [requestedById], references: [id], onDelete: SetNull)
+  jobId          String?               @unique @db.Uuid
+  scannedObjects Int                   @default(0)
+  indexedObjects Int                   @default(0)
+  issueCount     Int                   @default(0)
+  errorMessage   String?
+  issues         ReconciliationIssue[]
+  startedAt      DateTime?
+  completedAt    DateTime?
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
+
+  @@index([status, createdAt])
+}
+
+model ReconciliationIssue {
+  id             String                    @id @default(uuid()) @db.Uuid
+  runId          String                    @db.Uuid
+  run            ReconciliationRun         @relation(fields: [runId], references: [id], onDelete: Cascade)
+  type           ReconciliationIssueType
+  status         ReconciliationIssueStatus @default(OPEN)
+  objectKey      String
+  robotFileId    String?                   @db.Uuid
+  expectedSize   BigInt?
+  actualSize     BigInt?
+  resolutionNote String?
+  resolvedAt     DateTime?
+  createdAt      DateTime                  @default(now())
+  updatedAt      DateTime                  @updatedAt
+
+  @@unique([runId, type, objectKey])
+  @@index([status, type, createdAt])
+}
+
+model Tenant {
+  id        String         @id @default(uuid()) @db.Uuid
+  code      String         @unique
+  name      String
+  status    ResourceStatus @default(ACTIVE)
+  projects  Project[]
+  sites     Site[]
+  floors    Floor[]
+  robots    Robot[]
+  users     User[]
+  datasets  Dataset[]
+  tags      Tag[]
+  jobs      Job[]
+  auditLogs AuditLog[]
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+}
+
+model Project {
+  id         String              @id @default(uuid()) @db.Uuid
+  tenantId   String              @db.Uuid
+  tenant     Tenant              @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  code       String
+  name       String
+  status     ResourceStatus      @default(ACTIVE)
+  sites      Site[]
+  floors     Floor[]
+  robots     Robot[]
+  datasets   Dataset[]
+  jobs       Job[]
+  auditLogs  AuditLog[]
+  userAccess UserProjectAccess[]
+  maps       PlatformMap[]
+  templates  MissionTemplate[]
+  tasks      Task[]
+  createdAt  DateTime            @default(now())
+  updatedAt  DateTime            @updatedAt
+
+  @@unique([tenantId, code])
+  @@index([tenantId, status])
+}
+
+model Site {
+  id        String         @id @default(uuid()) @db.Uuid
+  tenantId  String         @db.Uuid
+  tenant    Tenant         @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  projectId String         @db.Uuid
+  project   Project        @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  code      String
+  name      String
+  status    ResourceStatus @default(ACTIVE)
+  floors    Floor[]
+  robots    Robot[]
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+
+  @@unique([projectId, code])
+  @@index([tenantId, projectId, status])
+}
+
+model Floor {
+  id        String         @id @default(uuid()) @db.Uuid
+  tenantId  String         @db.Uuid
+  tenant    Tenant         @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  projectId String         @db.Uuid
+  project   Project        @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  siteId    String         @db.Uuid
+  site      Site           @relation(fields: [siteId], references: [id], onDelete: Restrict)
+  code      String
+  name      String
+  level     Int?
+  status    ResourceStatus @default(ACTIVE)
+  robots    Robot[]
+  maps      PlatformMap[]
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+
+  @@unique([siteId, code])
+  @@index([tenantId, projectId, status])
+}
+
+model RoleDefinition {
+  code        UserRole         @id
+  displayName String
+  deprecated  Boolean          @default(false)
+  permissions RolePermission[]
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+}
+
+model Permission {
+  code        String           @id
+  description String
+  roles       RolePermission[]
+  createdAt   DateTime         @default(now())
+}
+
+model RolePermission {
+  roleCode       UserRole
+  permissionCode String
+  role           RoleDefinition @relation(fields: [roleCode], references: [code], onDelete: Cascade)
+  permission     Permission     @relation(fields: [permissionCode], references: [code], onDelete: Cascade)
+
+  @@id([roleCode, permissionCode])
+}
+
+model UserProjectAccess {
+  userId    String   @db.Uuid
+  projectId String   @db.Uuid
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@id([userId, projectId])
+  @@index([projectId])
+}
+
+model MissionTemplate {
+  id          String         @id @default(uuid()) @db.Uuid
+  tenantId    String         @db.Uuid
+  projectId   String         @db.Uuid
+  project     Project        @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  name        String
+  description String?
+  status      ResourceStatus @default(ACTIVE)
+  definition  Json
+  tasks       Task[]
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  @@index([tenantId, projectId, status])
+}
+
+model Task {
+  id                String           @id @default(uuid()) @db.Uuid
+  tenantId          String           @db.Uuid
+  projectId         String           @db.Uuid
+  project           Project          @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  robotId           String           @db.Uuid
+  robot             Robot            @relation(fields: [robotId], references: [id], onDelete: Restrict)
+  missionTemplateId String?          @db.Uuid
+  missionTemplate   MissionTemplate? @relation(fields: [missionTemplateId], references: [id], onDelete: SetNull)
+  mapVersionId      String           @db.Uuid
+  mapVersion        MapVersion       @relation(fields: [mapVersionId], references: [id], onDelete: Restrict)
+  zoneId            String?          @db.Uuid
+  zone              Zone?            @relation(fields: [zoneId], references: [id], onDelete: Restrict)
+  name              String
+  status            TaskStatus       @default(DRAFT)
+  scheduledAt       DateTime?
+  currentProgress   Decimal?         @db.Decimal(5, 2)
+  lastStatusSource  String?
+  lastStatusAt      DateTime?
+  createdById       String           @db.Uuid
+  createdBy         User             @relation("TaskCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  runs              TaskRun[]
+  events            TaskEvent[]
+  commands          Command[]
+  faults            FaultEvent[]
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  @@index([tenantId, projectId, status, scheduledAt])
+  @@index([robotId, status])
+}
+
+model TaskRun {
+  id                String    @id @default(uuid()) @db.Uuid
+  taskId            String    @db.Uuid
+  task              Task      @relation(fields: [taskId], references: [id], onDelete: Restrict)
+  robotId           String    @db.Uuid
+  robot             Robot     @relation(fields: [robotId], references: [id], onDelete: Restrict)
+  startedAt         DateTime?
+  endedAt           DateTime?
+  result            String?
+  failureReason     String?
+  plannedArea       Decimal?  @db.Decimal(14, 3)
+  cleanedArea       Decimal?  @db.Decimal(14, 3)
+  plannedDistance   Decimal?  @db.Decimal(14, 3)
+  actualDistance    Decimal?  @db.Decimal(14, 3)
+  runDurationMs     BigInt?
+  pauseDurationMs   BigInt?
+  blockedDurationMs BigInt?
+  batteryStart      Int?
+  batteryEnd        Int?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@index([taskId, startedAt])
+  @@index([robotId, startedAt])
+}
+
+model TaskEvent {
+  id              String      @id @default(uuid()) @db.Uuid
+  taskId          String      @db.Uuid
+  task            Task        @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  fromStatus      TaskStatus?
+  toStatus        TaskStatus
+  source          String
+  reason          String?
+  messageId       String?
+  deviceTimestamp DateTime?
+  receivedAt      DateTime    @default(now())
+  details         Json?
+
+  @@unique([taskId, messageId])
+  @@index([taskId, receivedAt])
+}
+
+model Command {
+  id             String        @id @default(uuid()) @db.Uuid
+  robotId        String        @db.Uuid
+  robot          Robot         @relation(fields: [robotId], references: [id], onDelete: Restrict)
+  taskId         String?       @db.Uuid
+  task           Task?         @relation(fields: [taskId], references: [id], onDelete: Restrict)
+  type           CommandType
+  payload        Json
+  status         CommandStatus @default(CREATED)
+  idempotencyKey String?
+  createdById    String        @db.Uuid
+  createdBy      User          @relation("CommandCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  sentAt         DateTime?
+  acceptedAt     DateTime?
+  finishedAt     DateTime?
+  failureCode    String?
+  failureMessage String?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  @@unique([createdById, idempotencyKey])
+  @@index([robotId, status, createdAt])
+  @@index([taskId, createdAt])
+}
+
+model OutboxMessage {
+  id            String    @id @default(uuid()) @db.Uuid
+  aggregateType String
+  aggregateId   String
+  topic         String
+  payload       Json
+  publishedAt   DateTime?
+  attempts      Int       @default(0)
+  availableAt   DateTime  @default(now())
+  createdAt     DateTime  @default(now())
+
+  @@index([publishedAt, availableAt])
+}
+
+model InboxMessage {
+  id              String    @id @default(uuid()) @db.Uuid
+  robotId         String    @db.Uuid
+  messageId       String
+  sequence        BigInt?
+  type            String
+  deviceTimestamp DateTime?
+  receivedAt      DateTime  @default(now())
+  payload         Json
+
+  @@unique([robotId, messageId])
+  @@index([robotId, sequence])
+}
+
+model TelemetrySample {
+  id              BigInt   @id @default(autoincrement())
+  robotId         String   @db.Uuid
+  messageId       String?
+  robot           Robot    @relation(fields: [robotId], references: [id], onDelete: Cascade)
+  deviceTimestamp DateTime
+  receivedAt      DateTime @default(now())
+  sequence        BigInt?
+  positionX       Float?
+  positionY       Float?
+  yaw             Float?
+  linearVelocity  Float?
+  angularVelocity Float?
+  battery         Float?
+  cpuUsage        Float?
+  gpuUsage        Float?
+  memoryUsage     Float?
+  socTemperature  Float?
+  network         Json?
+  taskProgress    Float?
+  payload         Json?
+
+  @@unique([robotId, messageId])
+  @@index([robotId, deviceTimestamp])
+}
+
+model RobotHealthSnapshot {
+  id              String   @id @default(uuid()) @db.Uuid
+  robotId         String   @db.Uuid
+  robot           Robot    @relation(fields: [robotId], references: [id], onDelete: Cascade)
+  deviceTimestamp DateTime
+  receivedAt      DateTime @default(now())
+  resources       Json
+  sensors         Json
+
+  @@index([robotId, deviceTimestamp])
+}
+
+model SafetyPolicy {
+  code                   String        @id
+  meaning                String
+  severity               FaultSeverity
+  latched                Boolean
+  fullBlock              Boolean
+  requiresOnsiteHandling Boolean
+  allowAutoRecovery      Boolean       @default(false)
+  configured             Boolean       @default(false)
+  handlingSuggestion     String
+  updatedAt              DateTime      @updatedAt
+}
+
+model SafetyState {
+  id          String    @id @default(uuid()) @db.Uuid
+  robotId     String    @db.Uuid
+  robot       Robot     @relation(fields: [robotId], references: [id], onDelete: Restrict)
+  code        String
+  active      Boolean   @default(true)
+  latched     Boolean
+  fullBlock   Boolean
+  source      String
+  message     String
+  occurredAt  DateTime
+  clearedAt   DateTime?
+  taskId      String?   @db.Uuid
+  position    Json?
+  maintenance Boolean   @default(false)
+  details     Json?
+
+  @@index([robotId, active, occurredAt])
+}
+
+model FaultEvent {
+  id               String              @id @default(uuid()) @db.Uuid
+  tenantId         String              @db.Uuid
+  projectId        String              @db.Uuid
+  robotId          String              @db.Uuid
+  robot            Robot               @relation(fields: [robotId], references: [id], onDelete: Restrict)
+  taskId           String?             @db.Uuid
+  task             Task?               @relation(fields: [taskId], references: [id], onDelete: Restrict)
+  safeCode         String
+  source           String
+  severity         FaultSeverity
+  latched          Boolean
+  fullBlock        Boolean
+  startAt          DateTime
+  endAt            DateTime?
+  positionX        Float?
+  positionY        Float?
+  details          Json?
+  handlingStatus   FaultHandlingStatus @default(OPEN)
+  acknowledgedById String?             @db.Uuid
+  acknowledgedBy   User?               @relation("FaultAcknowledgedBy", fields: [acknowledgedById], references: [id], onDelete: SetNull)
+  acknowledgedAt   DateTime?
+  handledById      String?             @db.Uuid
+  handledBy        User?               @relation("FaultHandledBy", fields: [handledById], references: [id], onDelete: SetNull)
+  handledAt        DateTime?
+  handlingRemark   String?
+  createdAt        DateTime            @default(now())
+
+  @@index([tenantId, projectId, handlingStatus, startAt])
+  @@index([robotId, startAt])
+}
+
+model MaintenanceRecord {
+  id                  String    @id @default(uuid()) @db.Uuid
+  tenantId            String    @db.Uuid
+  projectId           String    @db.Uuid
+  robotId             String    @db.Uuid
+  robot               Robot     @relation(fields: [robotId], references: [id], onDelete: Restrict)
+  enteredAt           DateTime
+  exitedAt            DateTime?
+  reason              String
+  operatorId          String    @db.Uuid
+  operator            User      @relation("MaintenanceOperator", fields: [operatorId], references: [id], onDelete: Restrict)
+  onsiteConfirmedById String?   @db.Uuid
+  onsiteConfirmedBy   User?     @relation("MaintenanceOnsiteConfirmer", fields: [onsiteConfirmedById], references: [id], onDelete: SetNull)
+  safeCodes           String[]
+  handling            String?
+  result              String?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  @@index([tenantId, projectId, robotId, enteredAt])
+}
+
+model PlatformMap {
+  id        String         @id @default(uuid()) @db.Uuid
+  tenantId  String         @db.Uuid
+  projectId String         @db.Uuid
+  project   Project        @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  floorId   String         @db.Uuid
+  floor     Floor          @relation(fields: [floorId], references: [id], onDelete: Restrict)
+  name      String
+  status    ResourceStatus @default(ACTIVE)
+  versions  MapVersion[]
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+
+  @@index([tenantId, projectId, floorId])
+}
+
+model MapVersion {
+  id           String           @id @default(uuid()) @db.Uuid
+  mapId        String           @db.Uuid
+  map          PlatformMap      @relation(fields: [mapId], references: [id], onDelete: Restrict)
+  version      Int
+  floorId      String           @db.Uuid
+  mapObjectKey String
+  mimeType     String
+  checksum     String
+  status       MapVersionStatus @default(DRAFT)
+  metadata     Json?
+  validation   Json?
+  createdById  String           @db.Uuid
+  createdBy    User             @relation("MapVersionCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  publishedAt  DateTime?
+  zones        Zone[]
+  tasks        Task[]
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  @@unique([mapId, version])
+  @@index([floorId, status])
+}
+
+model Zone {
+  id           String     @id @default(uuid()) @db.Uuid
+  mapVersionId String     @db.Uuid
+  mapVersion   MapVersion @relation(fields: [mapVersionId], references: [id], onDelete: Cascade)
+  type         ZoneType
+  name         String
+  geometry     Json
+  properties   Json?
+  tasks        Task[]
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  @@index([mapVersionId, type])
+}
+
+model SoftwareVersion {
+  id                 String            @id @default(uuid()) @db.Uuid
+  component          SoftwareComponent
+  version            String
+  objectKey          String
+  mimeType           String            @default("application/octet-stream")
+  fileSize           BigInt            @default(0)
+  checksum           String
+  signature          String?
+  signatureAlgorithm String?
+  status             ArtifactStatus    @default(VERIFIED)
+  compatibility      Json?
+  hardwareModels     String[]          @default([])
+  minBatteryPercent  Int               @default(30)
+  releaseNotes       String?
+  createdById        String?           @db.Uuid
+  verifiedAt         DateTime?
+  createdAt          DateTime          @default(now())
+  otaJobs            OTAJob[]
+  campaigns          OtaCampaign[]
+
+  @@unique([component, version])
+}
+
+model ConfigVersion {
+  id                String               @id @default(uuid()) @db.Uuid
+  tenantId          String               @db.Uuid
+  projectId         String?              @db.Uuid
+  category          ConfigCategory
+  version           String
+  checksum          String
+  content           Json
+  reason            String
+  approvalStatus    ConfigApprovalStatus @default(APPROVED)
+  createdById       String?              @db.Uuid
+  approvedById      String?              @db.Uuid
+  approvedAt        DateTime?
+  rollbackVersionId String?              @db.Uuid
+  createdAt         DateTime             @default(now())
+  otaJobs           OTAJob[]
+  campaigns         OtaCampaign[]
+  approvals         ConfigApproval[]
+
+  @@unique([tenantId, category, version])
+  @@index([tenantId, projectId, category])
+}
+
+model OTAJob {
+  id                String           @id @default(uuid()) @db.Uuid
+  tenantId          String           @db.Uuid
+  projectId         String           @db.Uuid
+  robotId           String           @db.Uuid
+  robot             Robot            @relation(fields: [robotId], references: [id], onDelete: Restrict)
+  softwareVersionId String?          @db.Uuid
+  softwareVersion   SoftwareVersion? @relation(fields: [softwareVersionId], references: [id], onDelete: Restrict)
+  configVersionId   String?          @db.Uuid
+  configVersion     ConfigVersion?   @relation(fields: [configVersionId], references: [id], onDelete: Restrict)
+  campaignId        String?          @db.Uuid
+  campaign          OtaCampaign?     @relation(fields: [campaignId], references: [id], onDelete: Restrict)
+  commandId         String?          @unique @db.Uuid
+  status            OtaStatus        @default(PENDING)
+  progress          Int              @default(0)
+  targetChecksum    String?
+  previousVersion   String?
+  rollbackVersion   String?
+  reason            String
+  startedAt         DateTime?
+  installStartedAt  DateTime?
+  validatedAt       DateTime?
+  lastEventAt       DateTime?
+  finishedAt        DateTime?
+  failureReason     String?
+  rollbackStatus    String?
+  rollbackReason    String?
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+  events            OTAEvent[]
+
+  @@index([tenantId, projectId, robotId, status])
+  @@index([campaignId, status])
+}
+
+model OtaCampaign {
+  id                String             @id @default(uuid()) @db.Uuid
+  tenantId          String             @db.Uuid
+  projectId         String             @db.Uuid
+  softwareVersionId String?            @db.Uuid
+  softwareVersion   SoftwareVersion?   @relation(fields: [softwareVersionId], references: [id], onDelete: Restrict)
+  configVersionId   String?            @db.Uuid
+  configVersion     ConfigVersion?     @relation(fields: [configVersionId], references: [id], onDelete: Restrict)
+  strategy          OtaRolloutStrategy
+  percentage        Int?
+  requestedRobotIds String[]           @default([]) @db.Uuid
+  status            OtaCampaignStatus  @default(READY)
+  reason            String
+  createdById       String             @db.Uuid
+  targetCount       Int                @default(0)
+  eligibleCount     Int                @default(0)
+  blockedCount      Int                @default(0)
+  blockedTargets    Json?
+  startedAt         DateTime?
+  finishedAt        DateTime?
+  rollbackOfId      String?            @db.Uuid
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  jobs              OTAJob[]
+
+  @@index([tenantId, projectId, createdAt])
+  @@index([softwareVersionId, status])
+  @@index([configVersionId, status])
+}
+
+model OTAEvent {
+  id         String         @id @default(uuid()) @db.Uuid
+  otaJobId   String         @db.Uuid
+  otaJob     OTAJob         @relation(fields: [otaJobId], references: [id], onDelete: Cascade)
+  status     OtaStatus
+  progress   Int            @default(0)
+  source     OtaEventSource
+  messageId  String?
+  reasonCode String?
+  details    Json?
+  occurredAt DateTime
+  receivedAt DateTime       @default(now())
+
+  @@unique([otaJobId, messageId])
+  @@index([otaJobId, occurredAt])
+}
+
+model ConfigApproval {
+  id              String                 @id @default(uuid()) @db.Uuid
+  configVersionId String                 @db.Uuid
+  configVersion   ConfigVersion          @relation(fields: [configVersionId], references: [id], onDelete: Cascade)
+  approverId      String                 @db.Uuid
+  decision        ConfigApprovalDecision
+  reason          String
+  createdAt       DateTime               @default(now())
+
+  @@unique([configVersionId, approverId])
+  @@index([configVersionId, createdAt])
+}
+
+model DiagnosticBundle {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @db.Uuid
+  projectId String   @db.Uuid
+  robotId   String   @db.Uuid
+  robot     Robot    @relation(fields: [robotId], references: [id], onDelete: Restrict)
+  objectKey String   @unique
+  mimeType  String
+  fileSize  BigInt
+  checksum  String
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  @@index([tenantId, projectId, robotId, createdAt])
+}
+
+model PushDevice {
+  id         String   @id @default(uuid()) @db.Uuid
+  userId     String   @db.Uuid
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  platform   String
+  pushToken  String   @unique
+  lastSeenAt DateTime @default(now())
+  createdAt  DateTime @default(now())
+
+  @@index([userId, lastSeenAt])
 }

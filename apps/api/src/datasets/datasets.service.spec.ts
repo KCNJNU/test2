@@ -14,6 +14,7 @@ describe('DatasetsService', () => {
   it('stores a complete manifest and persists its checksum when freezing a draft', async () => {
     prisma.datasetVersion.findUnique.mockResolvedValue(version());
     prisma.datasetVersion.update.mockImplementation(async ({ data }: { data: object }) => ({ ...version(DatasetVersionStatus.FROZEN), ...data }));
+    jest.spyOn(service, 'validateVersion').mockResolvedValueOnce({ valid: true } as never);
     const result = await service.freeze('00000000-0000-0000-0000-000000000010');
     expect(storage.putObject).toHaveBeenCalledWith(expect.objectContaining({ objectKey: 'manifests/00000000-0000-0000-0000-000000000020/v1/manifest.json', contentType: 'application/json' }));
     const content = storage.putObject.mock.calls[0][0].content.toString();

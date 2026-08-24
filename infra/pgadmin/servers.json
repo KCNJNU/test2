@@ -1,0 +1,13 @@
+{
+  "Servers": {
+    "1": {
+      "Name": "Cleaning Robot PostgreSQL",
+      "Group": "Project",
+      "Host": "postgres",
+      "Port": 5432,
+      "MaintenanceDB": "cleaning_robot",
+      "Username": "cleaning_robot",
+      "SSLMode": "prefer"
+    }
+  }
+}

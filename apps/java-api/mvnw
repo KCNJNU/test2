@@ -1,0 +1,13 @@
+#!/usr/bin/env sh
+set -eu
+BASE_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+VERSION=3.9.11
+MAVEN_HOME="$BASE_DIR/.mvn/apache-maven-$VERSION"
+if [ ! -x "$MAVEN_HOME/bin/mvn" ]; then
+  mkdir -p "$BASE_DIR/.mvn"
+  ARCHIVE="${TMPDIR:-/tmp}/apache-maven-$VERSION-bin.tar.gz"
+  curl -fsSL "https://archive.apache.org/dist/maven/maven-3/$VERSION/binaries/apache-maven-$VERSION-bin.tar.gz" -o "$ARCHIVE"
+  tar -xzf "$ARCHIVE" -C "$BASE_DIR/.mvn"
+fi
+exec "$MAVEN_HOME/bin/mvn" "$@"
+

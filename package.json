@@ -3,10 +3,20 @@
   "version": "0.1.0",
   "private": true,
   "workspaces": ["apps/*"],
+  "overrides": {
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "react-native": "0.86.2",
+    "react-native-screens": "4.26.2"
+  },
   "scripts": {
-    "dev": "npm run dev --workspaces --if-present",
-    "build": "npm run build --workspaces --if-present",
+    "dev": "node scripts/run-dev.mjs",
+    "build": "npm run build:node && node scripts/run-java-maven.mjs -DskipTests package",
+    "build:node": "npm run build --workspaces --if-present",
     "lint": "npm run lint --workspaces --if-present",
-    "test": "npm run test --workspaces --if-present"
+    "test": "npm run test:node && node scripts/run-java-maven.mjs test",
+    "test:node": "npm run test --workspaces --if-present && node --test scripts/release/*.test.mjs",
+    "java:dev": "node scripts/run-java-maven.mjs spring-boot:run",
+    "java:verify": "node scripts/run-java-maven.mjs verify"
   }
 }

@@ -1,0 +1,56 @@
+server {
+  listen 8080;
+  server_name _;
+  root /usr/share/nginx/html;
+  include /etc/nginx/mime.types;
+
+  add_header X-Content-Type-Options nosniff always;
+  add_header Referrer-Policy no-referrer always;
+  add_header X-Frame-Options DENY always;
+
+  location = /healthz {
+    access_log off;
+    default_type text/plain;
+    return 200 "healthy\n";
+  }
+
+  location = /version.json {
+    add_header Cache-Control "no-store" always;
+    default_type application/json;
+    return 200 '{"service":"web","version":"${APP_VERSION}","gitCommit":"${GIT_COMMIT}","buildTime":"${BUILD_TIME}"}';
+  }
+
+  location /api/ {
+    proxy_pass http://${JAVA_UPSTREAM};
+    proxy_http_version 1.1;
+    proxy_buffering off;
+    proxy_set_header Host ${JAVA_UPSTREAM};
+    proxy_set_header X-Forwarded-For ${DOLLAR}http_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto ${DOLLAR}http_x_forwarded_proto;
+  }
+
+  location ^~ /api/internal/ {
+    return 404;
+  }
+
+  location = /api/health {
+    proxy_pass http://${JAVA_UPSTREAM}/health;
+    proxy_http_version 1.1;
+    proxy_set_header Host ${JAVA_UPSTREAM};
+    proxy_set_header X-Forwarded-For ${DOLLAR}http_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto ${DOLLAR}http_x_forwarded_proto;
+  }
+
+  location /nest/ {
+    proxy_pass http://${NEST_UPSTREAM}/;
+    proxy_http_version 1.1;
+    proxy_buffering off;
+    proxy_set_header Host ${NEST_UPSTREAM};
+    proxy_set_header X-Forwarded-For ${DOLLAR}http_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto ${DOLLAR}http_x_forwarded_proto;
+  }
+
+  location / {
+    try_files ${DOLLAR}uri ${DOLLAR}uri/ /index.html;
+  }
+}

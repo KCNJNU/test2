@@ -1,0 +1,23 @@
+services:
+  migration:
+    image: ${MIGRATION_IMAGE:?immutable MIGRATION_IMAGE is required}
+    env_file: ${RUNTIME_ENV_FILE:?RUNTIME_ENV_FILE is required}
+    environment:
+      APP_VERSION: ${RELEASE_VERSION:?RELEASE_VERSION is required}
+      RELEASE_VERSION: ${RELEASE_VERSION}
+      GIT_COMMIT: ${RELEASE_GIT_COMMIT:?RELEASE_GIT_COMMIT is required}
+      BUILD_TIME: ${RELEASE_BUILD_TIME:?RELEASE_BUILD_TIME is required}
+      DEPLOYMENT_ENVIRONMENT: ${DEPLOYMENT_ENVIRONMENT:?DEPLOYMENT_ENVIRONMENT is required}
+      SLOT: migration
+    read_only: true
+    init: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    tmpfs:
+      - /tmp:size=32m,mode=1777
+    networks: [runtime]
+
+networks:
+  runtime:
+    external: true
+    name: ${PLATFORM_RUNTIME_NETWORK:?PLATFORM_RUNTIME_NETWORK is required}

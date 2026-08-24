@@ -1,0 +1,4 @@
+services:
+  device-gateway:
+    volumes:
+      - ${TLS_CERT_DIR:?TLS_CERT_DIR is required}/device-gateway:/run/secrets/mqtt:ro
