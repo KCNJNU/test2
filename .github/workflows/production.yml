@@ -44,7 +44,7 @@ jobs:
         run: |
           [[ "$REQUESTED_COMMIT" =~ ^[0-9a-f]{40}$ ]]
           [[ "$REQUESTED_VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.git_commit }}
           fetch-depth: 0
@@ -103,7 +103,7 @@ jobs:
           tar -czf deploy-package.tgz deploy scripts/release/release-manifest.mjs
           scp -i ~/.ssh/deploy_key deploy-package.tgz release-manifest.json "$DEPLOY_USER@$DEPLOY_HOST:/tmp/"
           ssh -i ~/.ssh/deploy_key "$DEPLOY_USER@$DEPLOY_HOST" "mkdir -p '$DEPLOY_ROOT/package' && tar -xzf /tmp/deploy-package.tgz -C '$DEPLOY_ROOT/package' && bash '$DEPLOY_ROOT/package/deploy/host/deploy-release.sh' /tmp/release-manifest.json '${{ github.actor }}'"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: production-${{ inputs.version }}
           path: |
@@ -120,7 +120,7 @@ jobs:
       RELEASE_COMMIT: ${{ inputs.git_commit }}
       RELEASE_VERSION: ${{ inputs.version }}
     steps:
-      - uses: actions/github-script@v8
+      - uses: actions/github-script@v9
         with:
           script: |
             const deployment = await github.rest.repos.createDeployment({
